@@ -1,0 +1,5 @@
+tomli>=2.0.0
+tomli-w>=1.0.0
+psutil>=5.9.0
+rich>=12.0.0
+ttkthemes>=3.2.2 
