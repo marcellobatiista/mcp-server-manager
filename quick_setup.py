@@ -3,257 +3,310 @@ import sys
 import platform
 import subprocess
 import re
-import cli.config_util as config_util  # Importar o módulo de utilitários de configuração da pasta cli
+import logging
+from pathlib import Path
+import cli.config_util as config_util
 
-# Configurações padrão
-NOME_SERVIDOR_PADRAO = "demon"
-NOME_DIRETORIO_PADRAO = "mcp_server"
-TOOLS_DIR = "tools"
-
-def cabecalho(titulo):
-    """Exibe um cabeçalho simples."""
-    print(f"\n=== {titulo} ===")
-
-def executar_comando(comando, mostrar_saida=False, shell=False):
-    """Executa um comando e retorna o status de saída."""
-    try:
-        if mostrar_saida:
-            return subprocess.call(comando, shell=shell)
-        else:
-            resultado = subprocess.run(comando, capture_output=True, text=True, shell=shell)
-            return resultado.returncode
-    except Exception as e:
-        print(f"Erro ao executar comando: {e}")
-        return 1
-
-def atualizar_pip():
-    """Atualiza o pip para a versão mais recente."""
-    cabecalho("Atualizando pip")
-    executar_comando([sys.executable, "-m", "pip", "install", "--upgrade", "pip"], 
-                    mostrar_saida=False)
-
-def instalar_dependencias():
-    """Instala dependências necessárias."""
-    cabecalho("Instalando dependências")
-    requirements = ["tomli>=2.0.0", "tomli-w>=1.0.0"]
-    for req in requirements:
-        executar_comando([sys.executable, "-m", "pip", "install", req], 
-                        mostrar_saida=False)
-
-def instalar_uv():
-    """Instala o UV usando o script da pasta tools."""
-    cabecalho("Instalando UV")
+class MCPSetup:
+    """Classe responsável pela configuração inicial do ambiente MCP."""
     
-    # Vamos detectar as versões do Python diretamente
-    print("Detectando versões do Python...")
-    pythons_encontrados = []
+    # Configurações padrão
+    NOME_SERVIDOR_PADRAO = "demon"
+    NOME_DIRETORIO_PADRAO = "mcp_server"
+    TOOLS_DIR = "tools"
     
-    if platform.system() == "Windows":
+    def __init__(self):
+        """Inicializa o configurador MCP."""
+        self.sistema = platform.system()
+        self.python_exe = sys.executable
+        self.diretorio_base = os.path.dirname(os.path.abspath(__file__))
+        self.arquivos_temp = []
+        
+        # Configurar logging básico
+        logging.basicConfig(
+            level=logging.INFO,
+            format='%(levelname)s: %(message)s'
+        )
+        self.logger = logging.getLogger("mcp_setup")
+    
+    def cabecalho(self, titulo):
+        """Exibe um cabeçalho simples."""
+        print(f"\n=== {titulo} ===")
+    
+    def executar_comando(self, comando, mostrar_saida=False, shell=False):
+        """Executa um comando e retorna o status de saída."""
         try:
-            output = subprocess.check_output("where python", shell=True, text=True, stderr=subprocess.DEVNULL)
-            paths = [p.strip() for p in output.splitlines() if "WindowsApps" not in p]
-            for i, path in enumerate(paths):
+            if mostrar_saida:
+                return subprocess.call(comando, shell=shell)
+            else:
+                resultado = subprocess.run(comando, capture_output=True, text=True, shell=shell)
+                return resultado.returncode
+        except Exception as e:
+            self.logger.error(f"Erro ao executar comando: {e}")
+            return 1
+    
+    def criar_arquivo_temporario(self, nome, conteudo, encoding='utf-8'):
+        """Cria um arquivo temporário e o adiciona à lista para limpeza posterior."""
+        try:
+            with open(nome, "w", encoding=encoding) as f:
+                f.write(conteudo)
+            self.arquivos_temp.append(nome)
+            return True
+        except Exception as e:
+            self.logger.error(f"Erro ao criar arquivo temporário {nome}: {e}")
+            return False
+    
+    def limpar_arquivos_temporarios(self):
+        """Remove todos os arquivos temporários criados durante o processo."""
+        for arquivo in self.arquivos_temp:
+            if os.path.exists(arquivo):
                 try:
-                    result = subprocess.check_output([path, "--version"], text=True, stderr=subprocess.STDOUT)
-                    version = result.strip()
-                    # Verificar se é Python 3.10+
-                    match = re.search(r"Python (\d+)\.(\d+)", version)
-                    if match:
-                        major, minor = map(int, match.groups())
-                        compatible = (major == 3 and minor >= 10)
-                        pythons_encontrados.append((i, path, version, compatible))
-                except:
-                    pass
-        except:
-            pass
-    
-    # Encontrar a melhor versão: primeiro compatível ou primeiro disponível
-    escolhido = None
-    # Primeiro, procurar por compatíveis
-    for idx, path, version, compatible in pythons_encontrados:
-        if compatible:
-            escolhido = idx
-            break
-    
-    # Se não tiver compatível, pegar o primeiro disponível
-    if escolhido is None and pythons_encontrados:
-        escolhido = pythons_encontrados[0][0]
-    
-    # Se ainda não tiver encontrado, usar o Python atual
-    if escolhido is None:
-        print("Nenhuma versão do Python encontrada. Usando o Python atual.")
-        escolhido = 0
+                    os.remove(arquivo)
+                except Exception as e:
+                    self.logger.warning(f"Não foi possível remover o arquivo temporário {arquivo}: {e}")
         
-    # Modificar o script para ser mais simples: criar um arquivo de resposta
-    with open("python_choice.txt", "w") as f:
-        f.write(f"{escolhido}\n")
+        # Limpar a lista de arquivos temporários
+        self.arquivos_temp = []
     
-    # Executar o script
-    script_path = os.path.join(TOOLS_DIR, "instalar_uv.py")
+    def atualizar_pip(self):
+        """Atualiza o pip para a versão mais recente."""
+        self.cabecalho("Atualizando pip")
+        self.executar_comando([self.python_exe, "-m", "pip", "install", "--upgrade", "pip"], 
+                             mostrar_saida=False)
+        self.logger.info("Pip atualizado com sucesso.")
     
-    if platform.system() == "Windows":
-        # Criar um batch mais simples que fornecerá a entrada
-        with open("instalar_uv_auto.bat", "w", encoding="cp1252") as f:
-            f.write("@echo off\n")
-            f.write(f"type python_choice.txt | {sys.executable} {script_path}\n")
+    def instalar_dependencias(self):
+        """Instala dependências necessárias."""
+        self.cabecalho("Instalando dependências")
+        requirements = ["tomli>=2.0.0", "tomli-w>=1.0.0"]
+        for req in requirements:
+            resultado = self.executar_comando([self.python_exe, "-m", "pip", "install", req], 
+                                            mostrar_saida=False)
+            if resultado == 0:
+                self.logger.info(f"Instalado {req}")
+            else:
+                self.logger.warning(f"Falha ao instalar {req}")
+    
+    def detectar_versoes_python(self):
+        """Detecta as versões do Python instaladas no sistema."""
+        pythons_encontrados = []
         
-        print(f"Instalando UV automaticamente com Python índice {escolhido}...")
-        executar_comando(["instalar_uv_auto.bat"], mostrar_saida=True, shell=True)
+        if self.sistema == "Windows":
+            try:
+                output = subprocess.check_output("where python", shell=True, text=True, stderr=subprocess.DEVNULL)
+                paths = [p.strip() for p in output.splitlines() if "WindowsApps" not in p]
+                for i, path in enumerate(paths):
+                    try:
+                        result = subprocess.check_output([path, "--version"], text=True, stderr=subprocess.STDOUT)
+                        version = result.strip()
+                        # Verificar se é Python 3.10+
+                        match = re.search(r"Python (\d+)\.(\d+)", version)
+                        if match:
+                            major, minor = map(int, match.groups())
+                            compatible = (major == 3 and minor >= 10)
+                            pythons_encontrados.append((i, path, version, compatible))
+                    except Exception:
+                        # Ignorar erros ao verificar versão de um Python específico
+                        pass
+            except Exception:
+                # Ignorar erro ao executar where python
+                pass
         
-        # Limpar arquivos temporários
-        if os.path.exists("instalar_uv_auto.bat"):
-            os.remove("instalar_uv_auto.bat")
-    else:
-        # No Linux/macOS
-        os.system(f"cat python_choice.txt | {sys.executable} {script_path}")
-    
-    # Limpar arquivos temporários
-    if os.path.exists("python_choice.txt"):
-        os.remove("python_choice.txt")
-
-def criar_projeto():
-    """Cria o projeto MCP com nome padrão."""
-    cabecalho("Criando projeto MCP")
-    script_path = os.path.join(TOOLS_DIR, "criar_projeto_mcp.py")
-    
-    # Criar script temporário para resposta automática
-    resposta_automatica = r"""
-import sys
-print("{0}")  # Nome do projeto
-print("s")    # Responder 's' para sobrescrever o diretório existente
-""".format(NOME_DIRETORIO_PADRAO)
-    
-    # Criar arquivo temporário para o script de resposta automática
-    with open("temp_criar_projeto.py", "w", encoding="utf-8") as f:
-        f.write(resposta_automatica)
-    
-    # Em Windows, usar um arquivo batch
-    if platform.system() == "Windows":
-        # Criar um arquivo batch temporário
-        with open("temp_criar_projeto.bat", "w", encoding="cp1252") as f:
-            f.write(f"@echo off\n")
-            f.write(f"{sys.executable} temp_criar_projeto.py | {sys.executable} {script_path}\n")
+        # Se não encontrou nenhum Python, adicionar o atual
+        if not pythons_encontrados:
+            self.logger.info("Nenhuma versão do Python encontrada. Usando o Python atual.")
+            pythons_encontrados.append((0, self.python_exe, "Python atual", True))
         
-        executar_comando(["temp_criar_projeto.bat"], mostrar_saida=True, shell=True)
+        return pythons_encontrados
+    
+    def escolher_melhor_python(self, pythons_encontrados):
+        """Escolhe a melhor versão de Python disponível."""
+        # Primeiro, procurar por compatíveis
+        for idx, path, version, compatible in pythons_encontrados:
+            if compatible:
+                return idx
         
-        # Limpar arquivos temporários
-        if os.path.exists("temp_criar_projeto.bat"):
-            os.remove("temp_criar_projeto.bat")
-    else:
-        # No Linux/macOS podemos usar pipes diretamente
-        os.system(f"{sys.executable} temp_criar_projeto.py | {sys.executable} {script_path}")
-    
-    # Limpar arquivos temporários
-    if os.path.exists("temp_criar_projeto.py"):
-        os.remove("temp_criar_projeto.py")
-
-def ativar_ambiente():
-    """Ativa o ambiente virtual e cria o servidor de teste."""
-    cabecalho("Configurando ambiente")
-    script_path = os.path.join(TOOLS_DIR, "ativar_ambiente.py")
-    
-    # Criar script para resposta automática (não executar o servidor)
-    resposta_automatica = "n\n"  # Responder 'n' para não executar o servidor
-    
-    # Criar arquivo temporário para a resposta
-    with open("temp_resposta.txt", "w", encoding="utf-8") as f:
-        f.write(resposta_automatica)
-    
-    # Em Windows, usar um arquivo batch
-    if platform.system() == "Windows":
-        # Criar um arquivo batch temporário
-        with open("temp_ativar.bat", "w", encoding="cp1252") as f:
-            f.write(f"@echo off\n")
-            f.write(f"type temp_resposta.txt | {sys.executable} {script_path}\n")
+        # Se não tiver compatível, pegar o primeiro disponível
+        if pythons_encontrados:
+            return pythons_encontrados[0][0]
         
-        executar_comando(["temp_ativar.bat"], mostrar_saida=True, shell=True)
+        return 0  # Fallback para o índice 0
+    
+    def instalar_uv(self):
+        """Instala o UV usando o script da pasta tools."""
+        self.cabecalho("Instalando UV")
         
-        # Limpar arquivos temporários
-        if os.path.exists("temp_ativar.bat"):
-            os.remove("temp_ativar.bat")
-    else:
-        # No Linux/macOS podemos usar pipes diretamente
-        os.system(f"cat temp_resposta.txt | {sys.executable} {script_path}")
-    
-    # Limpar arquivos temporários
-    if os.path.exists("temp_resposta.txt"):
-        os.remove("temp_resposta.txt")
-
-def ir_para_launcher():
-    """Executa o script launcher.py para começar a gerenciar os servidores."""
-    cabecalho("INICIANDO LAUNCHER")
-    
-    print("\n🚀 Iniciando o launcher MCP para gerenciar seus servidores...")
-    
-    try:
-        # Executa o launcher.py no novo caminho
-        script_path = os.path.join("cli", "launcher.py")
-        if os.path.exists(script_path):
-            executar_comando([sys.executable, script_path], mostrar_saida=True)
+        # Detectar versões do Python
+        self.logger.info("Detectando versões do Python...")
+        pythons_encontrados = self.detectar_versoes_python()
+        
+        # Escolher a melhor versão
+        escolhido = self.escolher_melhor_python(pythons_encontrados)
+        
+        # Criar arquivo de resposta
+        self.criar_arquivo_temporario("python_choice.txt", f"{escolhido}\n")
+        
+        # Obter caminho do script
+        script_path = os.path.join(self.TOOLS_DIR, "instalar_uv.py")
+        
+        if self.sistema == "Windows":
+            # Criar batch com redirecionamento
+            self.criar_arquivo_temporario(
+                "instalar_uv_auto.bat", 
+                f"@echo off\ntype python_choice.txt | {self.python_exe} {script_path}\n", 
+                encoding="cp1252"
+            )
+            
+            self.logger.info(f"Instalando UV automaticamente com Python índice {escolhido}...")
+            self.executar_comando(["instalar_uv_auto.bat"], mostrar_saida=True, shell=True)
         else:
-            print(f"❌ Erro: Não foi possível encontrar o launcher em {script_path}")
-    except Exception as e:
-        print(f"❌ Erro ao iniciar o launcher: {e}")
+            # No Linux/macOS
+            os.system(f"cat python_choice.txt | {self.python_exe} {script_path}")
+        
+        # Limpar arquivos temporários
+        self.limpar_arquivos_temporarios()
+    
+    def criar_projeto(self):
+        """Cria o projeto MCP com nome padrão."""
+        self.cabecalho("Criando projeto MCP")
+        script_path = os.path.join(self.TOOLS_DIR, "criar_projeto_mcp.py")
+        
+        # Criar script temporário para resposta automática
+        resposta_automatica = f"""
+import sys
+print("{self.NOME_DIRETORIO_PADRAO}")  # Nome do projeto
+print("s")    # Responder 's' para sobrescrever o diretório existente
+"""
+        
+        # Criar arquivo de resposta
+        self.criar_arquivo_temporario("temp_criar_projeto.py", resposta_automatica)
+        
+        if self.sistema == "Windows":
+            # Criar batch com redirecionamento
+            self.criar_arquivo_temporario(
+                "temp_criar_projeto.bat", 
+                f"@echo off\n{self.python_exe} temp_criar_projeto.py | {self.python_exe} {script_path}\n", 
+                encoding="cp1252"
+            )
+            
+            self.executar_comando(["temp_criar_projeto.bat"], mostrar_saida=True, shell=True)
+        else:
+            # No Linux/macOS
+            os.system(f"{self.python_exe} temp_criar_projeto.py | {self.python_exe} {script_path}")
+        
+        # Limpar arquivos temporários
+        self.limpar_arquivos_temporarios()
+    
+    def ativar_ambiente(self):
+        """Ativa o ambiente virtual e cria o servidor de teste."""
+        self.cabecalho("Configurando ambiente")
+        script_path = os.path.join(self.TOOLS_DIR, "ativar_ambiente.py")
+        
+        # Criar resposta automática
+        self.criar_arquivo_temporario("temp_resposta.txt", "n\n")  # Responder 'n' para não executar o servidor
+        
+        if self.sistema == "Windows":
+            # Criar batch com redirecionamento
+            self.criar_arquivo_temporario(
+                "temp_ativar.bat", 
+                f"@echo off\ntype temp_resposta.txt | {self.python_exe} {script_path}\n", 
+                encoding="cp1252"
+            )
+            
+            self.executar_comando(["temp_ativar.bat"], mostrar_saida=True, shell=True)
+        else:
+            # No Linux/macOS
+            os.system(f"cat temp_resposta.txt | {self.python_exe} {script_path}")
+        
+        # Limpar arquivos temporários
+        self.limpar_arquivos_temporarios()
+    
+    def criar_launcher_bat(self):
+        """Cria um arquivo batch para facilitar a execução do launcher."""
+        try:
+            launcher_script = os.path.join('cli', 'launcher.py')
+            # Criar arquivo launcher.bat
+            with open("launcher.bat", "w", encoding="cp1252") as f:
+                f.write("@echo off\n")
+                f.write("echo Iniciando MCP Launcher...\n")
+                f.write(f"{self.python_exe} {launcher_script}\n")
+            
+            self.logger.info("✅ Criado arquivo 'launcher.bat' para execução rápida")
+            return True
+        except Exception as e:
+            self.logger.error(f"❌ Erro ao criar arquivo launcher.bat: {e}")
+            return False
+    
+    def ir_para_launcher(self):
+        """Executa o script launcher.py para começar a gerenciar os servidores."""
+        self.cabecalho("INICIANDO LAUNCHER")
+        
+        print("\n🚀 Iniciando o launcher MCP para gerenciar seus servidores...")
+        
+        try:
+            # Executa o launcher.py
+            script_path = os.path.join("cli", "launcher.py")
+            if os.path.exists(script_path):
+                self.executar_comando([self.python_exe, script_path], mostrar_saida=True)
+            else:
+                self.logger.error(f"❌ Não foi possível encontrar o launcher em {script_path}")
+        except Exception as e:
+            self.logger.error(f"❌ Erro ao iniciar o launcher: {e}")
+    
+    def executar_setup(self):
+        """Executa o processo completo de setup."""
+        self.cabecalho("CONFIGURAÇÃO RÁPIDA DO SERVIDOR MCP")
+        
+        print("Este script vai configurar rapidamente o ambiente para os servidores MCP.")
+        print("Ele irá realizar as seguintes operações:")
+        print("  1. Atualizar o pip")
+        print("  2. Instalar dependências necessárias")
+        print("  3. Instalar o gerenciador UV")
+        print("  4. Criar o projeto MCP básico")
+        print("  5. Ativar o ambiente virtual")
+        print("  6. Iniciar o launcher para gerenciar servidores")
+        
+        continuar = input("\nDeseja continuar? (s/n): ")
+        if continuar.lower() != 's':
+            print("\nOperação cancelada pelo usuário.")
+            return False
+        
+        try:
+            # Executar cada etapa do processo
+            self.atualizar_pip()
+            self.instalar_dependencias()
+            self.instalar_uv()
+            self.criar_projeto()
+            self.ativar_ambiente()
+            self.criar_launcher_bat()
+            
+            print("\n✅ Configuração rápida concluída com sucesso!")
+            print("Agora você pode executar o launcher para gerenciar seus servidores.")
+            
+            iniciar_launcher = input("\nDeseja iniciar o launcher agora? (s/n): ")
+            if iniciar_launcher.lower() == 's':
+                self.ir_para_launcher()
+            else:
+                print("\nVocê pode iniciar o launcher a qualquer momento executando:")
+                launcher_script = os.path.join('cli', 'launcher.py')
+                print(f"  python {launcher_script}")
+                print("Ou usando o atalho 'launcher.bat' criado na pasta do projeto.")
+            
+            return True
+        
+        except Exception as e:
+            self.logger.error(f"Erro durante o processo de setup: {e}")
+            print("\n❌ Ocorreu um erro durante o processo de configuração.")
+            print("Verifique os logs para mais detalhes.")
+            return False
+        finally:
+            # Garantir que todos os arquivos temporários sejam removidos
+            self.limpar_arquivos_temporarios()
 
 def main():
-    """Função principal do script de setup rápido."""
-    cabecalho("CONFIGURAÇÃO RÁPIDA DO SERVIDOR MCP")
-    
-    print("Este script vai configurar rapidamente o ambiente para os servidores MCP.")
-    print("Ele irá realizar as seguintes operações:")
-    print("  1. Atualizar o pip")
-    print("  2. Instalar dependências necessárias")
-    print("  3. Instalar o gerenciador UV")
-    print("  4. Criar o projeto MCP básico")
-    print("  5. Ativar o ambiente virtual")
-    print("  6. Iniciar o launcher para gerenciar servidores")
-    
-    continuar = input("\nDeseja continuar? (s/n): ")
-    if continuar.lower() != 's':
-        print("\nOperação cancelada pelo usuário.")
-        sys.exit(0)
-    
-    # Atualizar o pip
-    atualizar_pip()
-    
-    # Instalar dependências
-    instalar_dependencias()
-    
-    # Instalar o UV
-    instalar_uv()
-    
-    # Criar o projeto MCP
-    criar_projeto()
-    
-    # Ativar ambiente e criar servidor teste
-    ativar_ambiente()
-    
-    # Criar arquivo .bat para executar o launcher
-    criar_launcher_bat()
-    
-    print("\n✅ Configuração rápida concluída com sucesso!")
-    print("Agora você pode executar o launcher para gerenciar seus servidores.")
-    
-    iniciar_launcher = input("\nDeseja iniciar o launcher agora? (s/n): ")
-    if iniciar_launcher.lower() == 's':
-        ir_para_launcher()
-    else:
-        print("\nVocê pode iniciar o launcher a qualquer momento executando:")
-        print(f"  python {os.path.join('cli', 'launcher.py')}")
-        print("Ou usando o atalho 'launcher.bat' criado na pasta do projeto.")
+    """Função principal do script."""
+    setup = MCPSetup()
+    setup.executar_setup()
 
-def criar_launcher_bat():
-    """Cria um arquivo batch para facilitar a execução do launcher."""
-    try:
-        # Criar arquivo launcher.bat
-        with open("launcher.bat", "w", encoding="cp1252") as f:
-            f.write(f"@echo off\n")
-            f.write("echo Iniciando MCP Launcher...\n")
-            f.write(f"{sys.executable} {os.path.join('cli', 'launcher.py')}\n")
-        
-        print("✅ Criado arquivo 'launcher.bat' para execução rápida")
-    except Exception as e:
-        print(f"❌ Erro ao criar arquivo launcher.bat: {e}")
-        
 if __name__ == "__main__":
     main() 
