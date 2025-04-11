@@ -1,11 +1,8 @@
 import os
 import sys
-import time
-import json
 import platform
 import subprocess
 import re
-from pathlib import Path
 import cli.config_util as config_util  # Importar o módulo de utilitários de configuração da pasta cli
 
 # Configurações padrão
@@ -28,10 +25,6 @@ def executar_comando(comando, mostrar_saida=False, shell=False):
     except Exception as e:
         print(f"Erro ao executar comando: {e}")
         return 1
-
-def criar_env_var(nome, valor):
-    """Cria uma variável de ambiente temporária."""
-    os.environ[nome] = valor
 
 def atualizar_pip():
     """Atualiza o pip para a versão mais recente."""
@@ -185,202 +178,6 @@ def ativar_ambiente():
     # Limpar arquivos temporários
     if os.path.exists("temp_resposta.txt"):
         os.remove("temp_resposta.txt")
-
-def gerar_config_json():
-    """Gera e mostra o config JSON para o Claude for Desktop."""
-    cabecalho("CONFIGURAÇÃO PARA O CLAUDE FOR DESKTOP")
-    
-    try:
-        # Ler informações do log
-        with open("log.txt", "r", encoding="utf-8") as log_file:
-            conteudo = log_file.read()
-        
-        # Extrair nome do projeto e caminho
-        nome_match = re.search(r"Nome do Projeto: (.+)", conteudo)
-        caminho_match = re.search(r"Caminho do Projeto: (.+)", conteudo)
-        
-        if nome_match and caminho_match:
-            nome_projeto = nome_match.group(1)
-            caminho_projeto = caminho_match.group(1)
-            
-            # Determinar o caminho do UV
-            uv_path = os.path.join(os.path.expanduser("~"), "pipx", "venvs", "uv", "Scripts", "uv.exe")
-            if not os.path.exists(uv_path) and platform.system() != "Windows":
-                uv_path = os.path.join(os.path.expanduser("~"), ".local", "pipx", "venvs", "uv", "bin", "uv")
-            if not os.path.exists(uv_path):
-                uv_path = "uv"
-            
-            # Criar o objeto JSON - usar NOME_SERVIDOR_PADRAO para o nome do servidor
-            config = {
-                "mcpServers": {
-                    NOME_SERVIDOR_PADRAO: {
-                        "command": uv_path,
-                        "args": [
-                            "--directory",
-                            caminho_projeto,
-                            "run",
-                            "demon.py"
-                        ]
-                    }
-                }
-            }
-            
-            # Mostrar o JSON para o usuário
-            print("\nCopie o JSON abaixo para o arquivo de configuração do Claude for Desktop:")
-            print(json.dumps(config, indent=4))
-            
-            # Mostrar onde colocar o JSON
-            print("\nCaminho do arquivo de configuração:")
-            if platform.system() == "Windows":
-                print("  %USERPROFILE%\\AppData\\Roaming\\Claude\\claude_desktop_config.json")
-            else:
-                print("  ~/Library/Application Support/Claude/claude_desktop_config.json")
-            
-            # Mostrar como executar o servidor manualmente
-            print(f"\nPara executar o servidor: {uv_path} --directory {caminho_projeto} run demon.py")
-            
-            # Atualizar automaticamente os arquivos de configuração
-            print("\n🔄 Atualizando configurações das IDEs automaticamente...")
-            
-            argumentos = [
-                "--directory",
-                caminho_projeto,
-                "run",
-                "demon.py"
-            ]
-            
-            resultado = config_util.atualizar_configuracoes(
-                nome_servidor=NOME_SERVIDOR_PADRAO,
-                comando=uv_path, 
-                argumentos=argumentos
-            )
-            
-            # Mostrar resultados da atualização
-            if resultado["cursor"]["status"] == "sucesso":
-                print(f"✅ Cursor: Configuração atualizada em {resultado['cursor']['caminho']}")
-            else:
-                print(f"❌ Cursor: {resultado['cursor']['mensagem']}")
-                
-            if resultado["claude"]["status"] == "sucesso":
-                print(f"✅ Claude Desktop: Configuração atualizada em {resultado['claude']['caminho']}")
-            else:
-                print(f"❌ Claude Desktop: {resultado['claude']['mensagem']}")
-                
-            print("\n🎉 Para usar o servidor, apenas reinicie o Cursor ou Claude Desktop!")
-            
-        else:
-            print("Não foi possível extrair as informações do log.txt")
-    
-    except Exception as e:
-        print(f"Erro ao gerar configuração: {e}")
-
-def criar_servidor_teste(nome_projeto, caminho_projeto):
-    """Cria um arquivo de servidor MCP para teste."""
-    cabecalho("Criando servidor MCP de teste")
-    
-    # Determinar o caminho do UV
-    uv_path = os.path.join(os.path.expanduser("~"), "pipx", "venvs", "uv", "Scripts", "uv.exe")
-    if not os.path.exists(uv_path) and platform.system() != "Windows":
-        uv_path = os.path.join(os.path.expanduser("~"), ".local", "pipx", "venvs", "uv", "bin", "uv")
-    if not os.path.exists(uv_path):
-        uv_path = "uv"
-    
-    print(f"✅ Usando uv de: {uv_path}")
-    
-    # Conteúdo do servidor MCP básico - usar NOME_SERVIDOR_PADRAO para o nome do servidor
-    conteudo_servidor = f'''#!/usr/bin/env python3
-# Servidor MCP de teste para o projeto {NOME_SERVIDOR_PADRAO}
-# Criado automaticamente por quick_setup.py
-
-import os
-from mcp.server.fastmcp import FastMCP
-
-# Criar instância do servidor MCP
-mcp = FastMCP(
-    name="{NOME_SERVIDOR_PADRAO}",
-    description="Servidor MCP básico para testes"
-)
-
-def ler_log():
-    """Função interna para ler o arquivo log.txt."""
-    try:
-        # Tenta encontrar o log.txt um nível acima
-        log_path = os.path.join(os.path.dirname(os.path.dirname(os.getcwd())), "log.txt")
-        if os.path.exists(log_path):
-            with open(log_path, "r", encoding="utf-8") as f:
-                return f.read()
-        return "Arquivo log.txt não encontrado"
-    except Exception as e:
-        return f"Erro ao ler log.txt: {{e}}"
-
-@mcp.tool()
-def hello(name: str = "World") -> str:
-    """Retorna uma saudação simples.
-    
-    Args:
-        name: O nome para saudar. Padrão: "World"
-        
-    Returns:
-        Uma mensagem de saudação
-    """
-    return f"Hello {{name}} from MCP!"
-
-@mcp.tool()
-def add(a: float, b: float) -> float:
-    """Soma dois números.
-    
-    Args:
-        a: Primeiro número
-        b: Segundo número
-        
-    Returns:
-        A soma dos dois números
-    """
-    return a + b
-
-@mcp.tool()
-def config_info() -> str:
-    """Retorna informações de configuração do servidor.
-    
-    Returns:
-        Uma string com informações sobre o servidor e o projeto
-    """
-    diretorio_atual = os.getcwd()
-    conteudo_log = ler_log()
-    
-    return f"""
-=== INFORMAÇÕES DO SERVIDOR MCP ===
-Nome do servidor: {NOME_SERVIDOR_PADRAO}
-Diretório: {{diretorio_atual}}
-
-=== LOG DE INSTALAÇÃO ===
-{{conteudo_log}}
-
-=== STATUS ===
-Servidor em execução: Sim
-"""
-
-if __name__ == "__main__":
-    print(f"Iniciando servidor MCP: {NOME_SERVIDOR_PADRAO}")
-    print("Você pode usar as seguintes ferramentas:")
-    print("  - hello: Retorna uma saudação simples")
-    print("  - add: Soma dois números")
-    print("  - config_info: Retorna informações de configuração")
-    mcp.run(transport='stdio')
-'''
-    
-    caminho_arquivo = os.path.join(caminho_projeto, "demon.py")
-    
-    try:
-        with open(caminho_arquivo, "w", encoding="utf-8") as f:
-            f.write(conteudo_servidor)
-        print(f"Servidor MCP de teste criado com sucesso: demon.py")
-        print("Para executar o servidor, use:")
-        print(f"  {uv_path} --directory {caminho_projeto} run demon.py")
-        return True
-    except Exception as e:
-        print(f"Erro ao criar o servidor de teste: {e}")
-        return False
 
 def ir_para_launcher():
     """Executa o script launcher.py para começar a gerenciar os servidores."""
