@@ -9,7 +9,8 @@ from pathlib import Path
 import cli.config_util as config_util  # Importar o módulo de utilitários de configuração da pasta cli
 
 # Configurações padrão
-NOME_PROJETO_PADRAO = "mcp_server"
+NOME_SERVIDOR_PADRAO = "demon"
+NOME_DIRETORIO_PADRAO = "mcp_server"
 TOOLS_DIR = "tools"
 
 def cabecalho(titulo):
@@ -127,7 +128,7 @@ def criar_projeto():
 import sys
 print("{0}")  # Nome do projeto
 print("s")    # Responder 's' para sobrescrever o diretório existente
-""".format(NOME_PROJETO_PADRAO)
+""".format(NOME_DIRETORIO_PADRAO)
     
     # Criar arquivo temporário para o script de resposta automática
     with open("temp_criar_projeto.py", "w", encoding="utf-8") as f:
@@ -209,16 +210,16 @@ def gerar_config_json():
             if not os.path.exists(uv_path):
                 uv_path = "uv"
             
-            # Criar o objeto JSON
+            # Criar o objeto JSON - usar NOME_SERVIDOR_PADRAO para o nome do servidor
             config = {
                 "mcpServers": {
-                    nome_projeto: {
+                    NOME_SERVIDOR_PADRAO: {
                         "command": uv_path,
                         "args": [
                             "--directory",
                             caminho_projeto,
                             "run",
-                            "server_teste.py"
+                            "demon.py"
                         ]
                     }
                 }
@@ -236,7 +237,7 @@ def gerar_config_json():
                 print("  ~/Library/Application Support/Claude/claude_desktop_config.json")
             
             # Mostrar como executar o servidor manualmente
-            print(f"\nPara executar o servidor: {uv_path} --directory {caminho_projeto} run server_teste.py")
+            print(f"\nPara executar o servidor: {uv_path} --directory {caminho_projeto} run demon.py")
             
             # Atualizar automaticamente os arquivos de configuração
             print("\n🔄 Atualizando configurações das IDEs automaticamente...")
@@ -245,11 +246,11 @@ def gerar_config_json():
                 "--directory",
                 caminho_projeto,
                 "run",
-                "server_teste.py"
+                "demon.py"
             ]
             
             resultado = config_util.atualizar_configuracoes(
-                nome_servidor=nome_projeto,
+                nome_servidor=NOME_SERVIDOR_PADRAO,
                 comando=uv_path, 
                 argumentos=argumentos
             )
@@ -286,9 +287,9 @@ def criar_servidor_teste(nome_projeto, caminho_projeto):
     
     print(f"✅ Usando uv de: {uv_path}")
     
-    # Conteúdo do servidor MCP básico
+    # Conteúdo do servidor MCP básico - usar NOME_SERVIDOR_PADRAO para o nome do servidor
     conteudo_servidor = f'''#!/usr/bin/env python3
-# Servidor MCP de teste para o projeto {nome_projeto}
+# Servidor MCP de teste para o projeto {NOME_SERVIDOR_PADRAO}
 # Criado automaticamente por quick_setup.py
 
 import os
@@ -296,7 +297,7 @@ from mcp.server.fastmcp import FastMCP
 
 # Criar instância do servidor MCP
 mcp = FastMCP(
-    name="{nome_projeto}",
+    name="{NOME_SERVIDOR_PADRAO}",
     description="Servidor MCP básico para testes"
 )
 
@@ -349,7 +350,7 @@ def config_info() -> str:
     
     return f"""
 === INFORMAÇÕES DO SERVIDOR MCP ===
-Nome do servidor: {nome_projeto}
+Nome do servidor: {NOME_SERVIDOR_PADRAO}
 Diretório: {{diretorio_atual}}
 
 === LOG DE INSTALAÇÃO ===
@@ -360,7 +361,7 @@ Servidor em execução: Sim
 """
 
 if __name__ == "__main__":
-    print(f"Iniciando servidor MCP: {nome_projeto}")
+    print(f"Iniciando servidor MCP: {NOME_SERVIDOR_PADRAO}")
     print("Você pode usar as seguintes ferramentas:")
     print("  - hello: Retorna uma saudação simples")
     print("  - add: Soma dois números")
@@ -368,14 +369,14 @@ if __name__ == "__main__":
     mcp.run(transport='stdio')
 '''
     
-    caminho_arquivo = os.path.join(caminho_projeto, "server_teste.py")
+    caminho_arquivo = os.path.join(caminho_projeto, "demon.py")
     
     try:
         with open(caminho_arquivo, "w", encoding="utf-8") as f:
             f.write(conteudo_servidor)
-        print(f"Servidor MCP de teste criado com sucesso: server_teste.py")
+        print(f"Servidor MCP de teste criado com sucesso: demon.py")
         print("Para executar o servidor, use:")
-        print(f"  {uv_path} --directory {caminho_projeto} run server_teste.py")
+        print(f"  {uv_path} --directory {caminho_projeto} run demon.py")
         return True
     except Exception as e:
         print(f"Erro ao criar o servidor de teste: {e}")

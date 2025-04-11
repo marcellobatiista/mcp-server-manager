@@ -249,7 +249,7 @@ def identificar_servidores_mcp(processos):
                 continue
             
             # Palavras-chave para identificar processos MCP
-            keywords = ["mcp", "server_teste.py", ".py"]
+            keywords = ["mcp", "demon.py", ".py"]
             for keyword in keywords:
                 for cmd in cmdline:
                     if keyword in cmd:
@@ -286,9 +286,11 @@ def identificar_servidores_mcp(processos):
                     # Tenta identificar o nome do ambiente virtual
                     partes_caminho = diretorio.split(os.path.sep)
                     
-                    # Se o caminho contém "mcp_server", usa-o como nome do projeto
-                    if "mcp_server" in partes_caminho:
-                        nome_projeto = "mcp_server"
+                    # Se o caminho contém "demon" ou "mcp_server", usa-o como nome do projeto
+                    if "demon" in partes_caminho:
+                        nome_projeto = "demon"
+                    elif "mcp_server" in partes_caminho:
+                        nome_projeto = "demon"  # Também usar "demon" para caminhos antigos com "mcp_server"
                     else:
                         # Caso contrário, usa o último diretório
                         nome_projeto = os.path.basename(diretorio)

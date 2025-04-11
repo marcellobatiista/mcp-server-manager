@@ -5,6 +5,11 @@ import subprocess
 import sys
 import json
 
+# Adiciona o diretório raiz ao path
+sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Importa o módulo de utilitários de configuração
+import cli.config_util as config_util
+
 def ler_log():
     """Lê o arquivo log.txt e extrai as informações relevantes."""
     try:
@@ -34,43 +39,37 @@ def ler_log():
         sys.exit(1)
 
 def criar_config_mcp(nome_projeto, caminho_projeto):
-    """Imprime a configuração MCP formatada no console."""
+    """Cria e atualiza a configuração MCP nos clientes."""
     # Determinar o caminho do uv para o JSON
     uv_path = os.path.join(os.path.expanduser("~"), "pipx", "venvs", "uv", "Scripts", "uv.exe")
     if not os.path.exists(uv_path):
         uv_path = "uv"  # Fallback para o comando simples se não encontrar o executável
         
-    config = {
-        "mcpServers": {
-            nome_projeto: {
-                "command": uv_path,
-                "args": [
-                    "--directory",
-                    caminho_projeto,
-                    "run",
-                    "server_teste.py"
-                ]
-            }
-        }
-    }
+    # Configurar argumentos para o servidor
+    args = [
+        "--directory",
+        caminho_projeto,
+        "run",
+        "demon.py"
+    ]
     
+    # Atualizar configurações usando config_util
     try:
-        # Em vez de criar um arquivo, imprimir no console
-        print("\n=== CONFIGURAÇÃO MCP PARA CLIENTES ===")
-        print("Copie o JSON abaixo para configurar seus clientes MCP (como Claude for Desktop):")
-        print(json.dumps(config, indent=4))
+        resultado = config_util.atualizar_configuracoes(nome_servidor=nome_projeto, comando=uv_path, argumentos=args)
+        
+        print("\n=== CONFIGURAÇÃO MCP ATUALIZADA ===")
+        for cliente, info in resultado.items():
+            if info["status"] == "sucesso":
+                print(f"✅ {cliente.title()}: Configuração atualizada em {info['caminho']}")
+            else:
+                print(f"❌ {cliente.title()}: {info['mensagem']}")
         print("=========================================")
-        print("\nPara Claude for Desktop, coloque esse JSON no arquivo:")
-        if platform.system() == "Windows":
-            print("  %USERPROFILE%\\AppData\\Roaming\\Claude\\claude_desktop_config.json")
-        else:  # macOS/Linux
-            print("  ~/Library/Application Support/Claude/claude_desktop_config.json")
-        print("\nPara mais informações, consulte: https://modelcontextprotocol.io/quickstart/server")
+        
     except Exception as e:
-        print(f"Erro ao gerar a configuração MCP: {e}")
+        print(f"❌ Erro ao atualizar configurações MCP: {e}")
 
 def criar_servidor_teste(nome_projeto, caminho_projeto):
-    """Cria um arquivo server_teste.py com um servidor MCP básico."""
+    """Cria um arquivo demon.py com um servidor MCP básico."""
     
     # Determinar o caminho do uv
     uv_path = os.path.join(os.path.expanduser("~"), "pipx", "venvs", "uv", "Scripts", "uv.exe")
@@ -81,7 +80,7 @@ def criar_servidor_teste(nome_projeto, caminho_projeto):
     else:
         print(f"✅ Usando uv de: {uv_path}")
     
-    # Conteúdo do arquivo server_teste.py
+    # Conteúdo do arquivo demon.py
     servidor_conteudo = '''
 import os
 import re
@@ -141,13 +140,13 @@ if __name__ == "__main__":
 '''
     
     try:
-        # Criar o arquivo server_teste.py
-        with open("server_teste.py", "w", encoding="utf-8") as f:
+        # Criar o arquivo demon.py
+        with open("demon.py", "w", encoding="utf-8") as f:
             f.write(servidor_conteudo.strip())
-        print("\nServidor MCP de teste criado com sucesso: server_teste.py")
+        print("\nServidor MCP de teste criado com sucesso: demon.py")
         
         print("Para executar o servidor, use:")
-        print(f"  {uv_path} --directory {os.path.abspath('.')} run server_teste.py")
+        print(f"  {uv_path} --directory {os.path.abspath('.')} run demon.py")
         
         # Mostrar a configuração MCP antes de executar o servidor
         criar_config_mcp(nome_projeto, caminho_projeto)
@@ -227,8 +226,8 @@ def ativar_e_instalar():
     print("\nAmbiente virtual ativado e pacotes instalados com sucesso!")
     print("O projeto está pronto para uso.")
     
-    # Criar o arquivo server_teste.py
-    criar_servidor_teste(nome_projeto, caminho_projeto)
+    # Criar o arquivo demon.py
+    criar_servidor_teste("demon", caminho_projeto)
 
 if __name__ == "__main__":
     ativar_e_instalar() 
