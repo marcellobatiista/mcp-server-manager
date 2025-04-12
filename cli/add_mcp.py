@@ -17,14 +17,14 @@ def cabecalho(titulo):
 
 def verificar_ambiente():
     """Verifica se o ambiente básico já foi configurado pelo quick_setup.py."""
-    # Verificar se a pasta demon existe
-    if not os.path.exists("demon") and not os.path.exists("mcp_server"):
-        print("Erro: A pasta 'demon' não foi encontrada!")
+    # Verificar se a pasta mcp_server existe
+    if not os.path.exists("mcp_server"):
+        print("Erro: A pasta 'mcp_server' não foi encontrada!")
         print("Execute primeiro o script quick_setup.py para criar o ambiente básico.")
         return False
     
-    # Determinar o caminho do projeto (suporta tanto "demon" quanto o legado "mcp_server")
-    projeto_dir = "demon" if os.path.exists("demon") else "mcp_server"
+    # Determinar o caminho do projeto ("mcp_server")
+    projeto_dir = "mcp_server"
     
     # Verificar se o ambiente virtual existe
     venv_path = os.path.join(projeto_dir, ".venv")
@@ -53,11 +53,7 @@ def obter_info_base():
         if match:
             caminho_projeto = match.group(1)
         else:
-            # Usar caminho absoluto, priorizando a pasta "demon" se existir
-            if os.path.exists("demon"):
-                caminho_projeto = os.path.abspath("demon")
-            else:
-                caminho_projeto = os.path.abspath("mcp_server")
+            caminho_projeto = os.path.abspath("mcp_server")
         
         # Determinar o caminho do UV
         uv_path = os.path.join(os.path.expanduser("~"), "pipx", "venvs", "uv", "Scripts", "uv.exe")

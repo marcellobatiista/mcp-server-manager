@@ -856,6 +856,7 @@ def mostrar_menu():
     console.print("5. [yellow]Encerrar servidor específico[/yellow]")
     console.print("6. [red]Encerrar todos os servidores[/red]")
     console.print("7. [red]Remover servidor configurado[/red] (Exclui dos arquivos de configuração)")
+    console.print("8. [blue]Adicionar servidor MCP[/blue] (Cria um novo servidor)")
     console.print("0. [bold]Sair[/bold]\n")
     
     opcao = input("Escolha uma opção: ")
@@ -907,6 +908,23 @@ def main():
                 
             elif opcao == '7':
                 remover_servidor_configurado(configs)
+                input("\nPressione ENTER para continuar...")
+                
+            elif opcao == '8':
+                cabecalho("ADICIONAR SERVIDOR MCP")
+                console.print("[dim]Iniciando utilitário para adicionar servidor MCP...[/dim]")
+                try:
+                    # Chamar o script add_mcp.py
+                    script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "add_mcp.py")
+                    if platform.system() == "Windows":
+                        subprocess.run([sys.executable, script_path], check=True)
+                    else:
+                        subprocess.run([sys.executable, script_path], check=True)
+                    console.print("[green]✓ Utilitário de adição de servidor MCP concluído.[/green]")
+                except subprocess.CalledProcessError as e:
+                    console.print(f"[red]Erro ao executar o utilitário: {str(e)}[/red]")
+                except Exception as e:
+                    console.print(f"[red]Erro inesperado: {str(e)}[/red]")
                 input("\nPressione ENTER para continuar...")
                 
             elif opcao == '0':

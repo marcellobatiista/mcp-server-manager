@@ -1,3 +1,0 @@
-@echo off
-echo Iniciando utilitário para adicionar servidor MCP...
-python cli\add_mcp.py
