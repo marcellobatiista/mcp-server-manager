@@ -9,6 +9,7 @@ import json
 import tkinter as tk
 from tkinter import ttk, messagebox, filedialog
 from pathlib import Path
+import ast
 
 # Cores para a interface gráfica
 COLORS = {
@@ -335,3 +336,324 @@ def format_path(path):
             return formatted
     
     return str(path)
+
+
+def clean_docstring(docstring):
+    """
+    Limpa e formata uma docstring para melhor exibição.
+    
+    Args:
+        docstring (str): A docstring original
+        
+    Returns:
+        str: A docstring formatada
+    """
+    if not docstring:
+        return "Sem descrição disponível"
+    
+    # Remover delimitadores de docstring (""" ou ''')
+    if docstring.startswith('"""') and docstring.endswith('"""'):
+        docstring = docstring[3:-3]
+    elif docstring.startswith("'''") and docstring.endswith("'''"):
+        docstring = docstring[3:-3]
+    
+    # Tratar caso onde as aspas triplas não estão na mesma linha
+    # Às vezes a regex captura a aspas do início numa linha e do final noutra
+    docstring = docstring.replace('"""\n', '\n').replace('\n"""', '\n')
+    docstring = docstring.replace("'''\n", '\n').replace("\n'''", '\n')
+    
+    # Dividir em linhas e remover indentação comum
+    lines = docstring.split('\n')
+    
+    # Remover linhas em branco no início e no fim
+    while lines and not lines[0].strip():
+        lines.pop(0)
+    while lines and not lines[-1].strip():
+        lines.pop()
+    
+    if not lines:
+        return "Sem descrição disponível"
+    
+    # Encontrar indentação comum (exceto para a primeira linha)
+    indent = float('inf')
+    for line in lines[1:]:
+        if line.strip():  # Ignorar linhas vazias
+            line_indent = len(line) - len(line.lstrip())
+            indent = min(indent, line_indent)
+    
+    if indent == float('inf'):
+        indent = 0
+    
+    # Remover indentação comum de todas as linhas (exceto a primeira)
+    result = [lines[0].strip()]
+    for line in lines[1:]:
+        if line.strip():  # Manter linhas não vazias
+            result.append(line[indent:] if indent <= len(line) else line.strip())
+        else:
+            result.append('')  # Manter linhas vazias
+    
+    # Verificar se a docstring contém tabulações e convertê-las para espaços
+    result = [line.replace('\t', '    ') for line in result]
+    
+    return '\n'.join(result).strip()
+
+
+def extract_mcp_tools(file_path):
+    """
+    Extrai as ferramentas MCP de um arquivo Python.
+    
+    Args:
+        file_path (str): Caminho para o arquivo Python
+        
+    Returns:
+        list: Lista de dicionários com informações das ferramentas MCP
+    """
+    tools = []
+    # Conjunto para rastrear nomes de ferramentas já encontradas e evitar duplicações
+    tool_names = set()
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Analisar o código Python
+        tree = ast.parse(content)
+        
+        # Procurar por funções decoradas com @mcp.tool()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                # Pular se esta função já foi processada
+                if node.name in tool_names:
+                    continue
+                    
+                # Verificar se a função tem decoradores
+                for decorator in node.decorator_list:
+                    # Procurar por diferentes formas do decorador @mcp.tool()
+                    is_mcp_tool = False
+                    
+                    # Caso 1: @mcp.tool()
+                    if (isinstance(decorator, ast.Call) and 
+                        isinstance(decorator.func, ast.Attribute) and 
+                        decorator.func.attr == 'tool' and 
+                        isinstance(decorator.func.value, ast.Name) and 
+                        decorator.func.value.id == 'mcp'):
+                        is_mcp_tool = True
+                    
+                    # Caso 2: @mcp.tool
+                    elif (isinstance(decorator, ast.Attribute) and 
+                          decorator.attr == 'tool' and 
+                          isinstance(decorator.value, ast.Name) and 
+                          decorator.value.id == 'mcp'):
+                        is_mcp_tool = True
+                        
+                    # Caso 3: @tool (se a função mcp.tool foi importada diretamente)
+                    elif (isinstance(decorator, ast.Name) and 
+                          decorator.id == 'tool'):
+                        is_mcp_tool = True
+                    
+                    if is_mcp_tool:
+                        # Adicionar o nome da ferramenta ao conjunto para evitar duplicações
+                        tool_names.add(node.name)
+                        
+                        # Método 1: Extrair a docstring com ast.get_docstring
+                        docstring = ast.get_docstring(node)
+                        
+                        # Método 2: Tentar extrair diretamente do nó AST
+                        if not docstring:
+                            for item in node.body:
+                                if isinstance(item, ast.Expr) and hasattr(item.value, 'value') and isinstance(item.value.value, str):
+                                    docstring = item.value.value
+                                    break
+                                elif isinstance(item, ast.Expr) and isinstance(item.value, ast.Constant) and isinstance(item.value.s, str):
+                                    docstring = item.value.s
+                                    break
+                                elif isinstance(item, ast.Expr) and isinstance(item.value, ast.Str):
+                                    # Para Python 3.7 e versões anteriores
+                                    docstring = item.value.s
+                                    break
+                        
+                        # Método 3: Extrair usando expressões regulares
+                        if not docstring:
+                            import re
+                            
+                            # Obter a linha inicial da função
+                            lineno = node.lineno
+                            col_offset = node.col_offset
+                            
+                            # Extrair o conteúdo da função do código fonte
+                            func_pattern = rf"def\s+{node.name}\s*\(.*?\).*?:(.*?)(?=\n\s*[^\s\n]|\Z)"
+                            func_match = re.search(func_pattern, content, re.DOTALL)
+                            
+                            if func_match:
+                                func_body = func_match.group(1)
+                                
+                                # Procurar por docstrings com aspas triplas duplas
+                                doc_match = re.search(r'"""(.*?)"""', func_body, re.DOTALL)
+                                if doc_match:
+                                    docstring = doc_match.group(1)
+                                else:
+                                    # Procurar por docstrings com aspas triplas simples
+                                    doc_match = re.search(r"'''(.*?)'''", func_body, re.DOTALL)
+                                    if doc_match:
+                                        docstring = doc_match.group(1)
+                        
+                        # Se mesmo assim não encontrou, use uma mensagem padrão
+                        if not docstring:
+                            docstring = f"Ferramenta: {node.name} (sem descrição disponível)"
+                        
+                        # Limpar e formatar a docstring
+                        docstring = clean_docstring(docstring)
+                        
+                        # Coletar informações dos parâmetros
+                        params = []
+                        for arg in node.args.args:
+                            if arg.arg != 'self':  # Ignorar self em métodos
+                                param_name = arg.arg
+                                param_type = ""
+                                
+                                # Tentar extrair o tipo de anotação
+                                if arg.annotation:
+                                    if isinstance(arg.annotation, ast.Name):
+                                        param_type = arg.annotation.id
+                                    elif isinstance(arg.annotation, ast.Subscript):
+                                        if isinstance(arg.annotation.value, ast.Name):
+                                            container = arg.annotation.value.id
+                                            # Tentar obter o tipo interno
+                                            if isinstance(arg.annotation.slice, ast.Index):  # Python 3.8 e anterior
+                                                if isinstance(arg.annotation.slice.value, ast.Name):
+                                                    inner_type = arg.annotation.slice.value.id
+                                                    param_type = f"{container}[{inner_type}]"
+                                                else:
+                                                    param_type = f"{container}"
+                                            else:  # Python 3.9+
+                                                if isinstance(arg.annotation.slice, ast.Name):
+                                                    inner_type = arg.annotation.slice.id
+                                                    param_type = f"{container}[{inner_type}]"
+                                                else:
+                                                    param_type = f"{container}"
+                                
+                                # Verificar se há valor padrão para este parâmetro
+                                param_default = None
+                                param_has_default = False
+                                
+                                # Encontrar valores padrão examinando defaults na função
+                                if node.args.defaults:
+                                    # Calcular o índice do argumento na lista de defaults
+                                    # Os defaults são alinhados à direita na lista de argumentos
+                                    args_without_defaults = len(node.args.args) - len(node.args.defaults)
+                                    arg_idx = list(node.args.args).index(arg)
+                                    if arg_idx >= args_without_defaults:
+                                        default_idx = arg_idx - args_without_defaults
+                                        if default_idx >= 0 and default_idx < len(node.args.defaults):
+                                            default_node = node.args.defaults[default_idx]
+                                            param_has_default = True
+                                            # Extrair o valor literal do default
+                                            if isinstance(default_node, ast.Constant):
+                                                param_default = default_node.value
+                                            elif isinstance(default_node, ast.Str):  # Para compatibilidade com versões antigas
+                                                param_default = default_node.s
+                                            elif isinstance(default_node, ast.Num):  # Para compatibilidade com versões antigas
+                                                param_default = default_node.n
+                                            elif isinstance(default_node, ast.NameConstant):  # Para compatibilidade com versões antigas
+                                                param_default = default_node.value
+                                            elif isinstance(default_node, ast.Name) and default_node.id == 'None':
+                                                param_default = None
+                                
+                                params.append({
+                                    "name": param_name,
+                                    "type": param_type,
+                                    "has_default": param_has_default,
+                                    "default": param_default
+                                })
+                        
+                        # Extrair tipo de retorno
+                        return_type = ""
+                        if node.returns:
+                            if isinstance(node.returns, ast.Name):
+                                return_type = node.returns.id
+                            elif isinstance(node.returns, ast.Subscript):
+                                if isinstance(node.returns.value, ast.Name):
+                                    container = node.returns.value.id
+                                    # Similar ao código para param_type
+                                    if isinstance(node.returns.slice, ast.Index):  # Python 3.8 e anterior
+                                        if isinstance(node.returns.slice.value, ast.Name):
+                                            inner_type = node.returns.slice.value.id
+                                            return_type = f"{container}[{inner_type}]"
+                                        else:
+                                            return_type = f"{container}"
+                                    else:  # Python 3.9+
+                                        if isinstance(node.returns.slice, ast.Name):
+                                            inner_type = node.returns.slice.id
+                                            return_type = f"{container}[{inner_type}]"
+                                        else:
+                                            return_type = f"{container}"
+                        
+                        tools.append({
+                            "name": node.name,
+                            "docstring": docstring,
+                            "params": params,
+                            "return_type": return_type
+                        })
+                        
+                        # Não continuar verificando outros decoradores desta função
+                        break
+        
+        # Verificar se não encontrou nenhuma ferramenta e tentar buscar de forma alternativa
+        if not tools:
+            # Tentar buscar usando expressões regulares para os casos onde o AST falha
+            import re
+            
+            # Padrões para encontrar funções decoradas com docstrings
+            patterns = [
+                # Função com docstring em aspas triplas duplas
+                r'@mcp\.tool\s*\(\s*\)\s*\n\s*(?:async\s+)?def\s+(\w+)\s*\([^)]*\)\s*(?:->[^:]*)?:\s*"""(.*?)"""',
+                r'@mcp\.tool\s*\n\s*(?:async\s+)?def\s+(\w+)\s*\([^)]*\)\s*(?:->[^:]*)?:\s*"""(.*?)"""',
+                r'@tool\s*\(\s*\)\s*\n\s*(?:async\s+)?def\s+(\w+)\s*\([^)]*\)\s*(?:->[^:]*)?:\s*"""(.*?)"""',
+                r'@tool\s*\n\s*(?:async\s+)?def\s+(\w+)\s*\([^)]*\)\s*(?:->[^:]*)?:\s*"""(.*?)"""',
+                
+                # Função com docstring em aspas triplas simples
+                r"@mcp\.tool\s*\(\s*\)\s*\n\s*(?:async\s+)?def\s+(\w+)\s*\([^)]*\)\s*(?:->[^:]*)?:\s*'''(.*?)'''",
+                r"@mcp\.tool\s*\n\s*(?:async\s+)?def\s+(\w+)\s*\([^)]*\)\s*(?:->[^:]*)?:\s*'''(.*?)'''",
+                r"@tool\s*\(\s*\)\s*\n\s*(?:async\s+)?def\s+(\w+)\s*\([^)]*\)\s*(?:->[^:]*)?:\s*'''(.*?)'''",
+                r"@tool\s*\n\s*(?:async\s+)?def\s+(\w+)\s*\([^)]*\)\s*(?:->[^:]*)?:\s*'''(.*?)'''",
+                
+                # Função sem docstring
+                r'@mcp\.tool\s*\(\s*\)\s*\n\s*(?:async\s+)?def\s+(\w+)',
+                r'@mcp\.tool\s*\n\s*(?:async\s+)?def\s+(\w+)',
+                r'@tool\s*\(\s*\)\s*\n\s*(?:async\s+)?def\s+(\w+)',
+                r'@tool\s*\n\s*(?:async\s+)?def\s+(\w+)'
+            ]
+            
+            for pattern in patterns:
+                matches = re.finditer(pattern, content, re.DOTALL)
+                for match in matches:
+                    function_name = match.group(1)
+                    
+                    # Pular se esta função já foi processada
+                    if function_name in tool_names:
+                        continue
+                        
+                    # Adicionar o nome da ferramenta ao conjunto para evitar duplicações
+                    tool_names.add(function_name)
+                    
+                    docstring = "Sem descrição disponível"
+                    
+                    # Se o padrão capturou uma docstring (grupo 2), use-a
+                    if len(match.groups()) > 1 and match.group(2):
+                        docstring = match.group(2)
+                    
+                    # Limpar e formatar a docstring
+                    docstring = clean_docstring(docstring)
+                    
+                    # Adicionar uma entrada para a ferramenta encontrada
+                    tools.append({
+                        "name": function_name,
+                        "docstring": docstring,
+                        "params": [],
+                        "return_type": ""
+                    })
+        
+        return tools
+    except Exception as e:
+        print(f"Erro ao extrair ferramentas MCP: {str(e)}")
+        return []

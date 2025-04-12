@@ -15,6 +15,7 @@ import json
 from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 from datetime import datetime
+import re
 
 # Adiciona o diretório raiz ao sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -27,7 +28,8 @@ from gui.utils import (
     show_error_message,
     show_info_message,
     ask_yes_no,
-    show_options_dialog
+    show_options_dialog,
+    extract_mcp_tools
 )
 
 # Importa o gerenciador de servidores
@@ -659,8 +661,17 @@ class MCPServerGUI(tk.Tk):
         self.server_config_label = ttk.Label(row3, text="-")
         self.server_config_label.grid(row=0, column=1, sticky="w")
         
-        # Carregar servidores na lista já não é necessário aqui, pois é feito no _init_application
-        # self.refresh_servers()
+        # Linha 4: Botão de Ferramentas
+        row4 = ttk.Frame(server_details_frame)
+        row4.pack(fill=tk.X, pady=5)
+        
+        self.tools_button = ttk.Button(
+            row4, 
+            text="Ferramentas", 
+            command=self.show_server_tools,
+            state=tk.DISABLED
+        )
+        self.tools_button.pack(side=tk.LEFT)
     
     def setup_logs_tab(self):
         """Configura a aba de logs."""
@@ -736,6 +747,7 @@ class MCPServerGUI(tk.Tk):
             self.restart_button.config(state=tk.DISABLED)
             self.edit_button.config(state=tk.DISABLED)
             self.remove_button.config(state=tk.DISABLED)
+            self.tools_button.config(state=tk.DISABLED)
             return
         
         # Obter o servidor selecionado
@@ -761,9 +773,10 @@ class MCPServerGUI(tk.Tk):
                 self.stop_button.config(state=tk.DISABLED)
                 self.restart_button.config(state=tk.DISABLED)
             
-            # Sempre habilitar botões de edição e remoção
+            # Sempre habilitar botões de edição, remoção e ferramentas
             self.edit_button.config(state=tk.NORMAL)
             self.remove_button.config(state=tk.NORMAL)
+            self.tools_button.config(state=tk.NORMAL)
     
     def update_server_details(self, server):
         """Atualiza as informações de detalhes do servidor selecionado."""
@@ -1479,7 +1492,9 @@ class MCPServerGUI(tk.Tk):
                 "--directory",
                 mcp_server_dir,
                 "run",
-                os.path.basename(script_path)
+                os.path.basename(script_path),
+                "--log-level",
+                "ERROR"
             ]
             
             # Atualizar os arquivos de configuração
@@ -1526,7 +1541,7 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 # Inicializa o servidor FastMCP
-mcp = FastMCP("{name}")
+mcp = FastMCP("{name}", log_level="ERROR")
 
 @mcp.tool()
 async def hello(name: str = "Mundo") -> str:
@@ -1639,6 +1654,239 @@ if __name__ == "__main__":
         
         # Fechar a aplicação
         self.destroy()
+
+    def show_server_tools(self):
+        """Exibe uma janela com as ferramentas MCP do servidor selecionado."""
+        selection = self.servers_tree.selection()
+        if not selection:
+            return
+        
+        item = self.servers_tree.item(selection[0])
+        server_name = item["values"][0]
+        server = self.server_manager.get_server(server_name)
+        
+        if not server or not server.script_path or not os.path.exists(server.script_path):
+            show_error_message("Erro", "Arquivo de script do servidor não encontrado.")
+            return
+        
+        # Extrair as ferramentas MCP do arquivo do servidor
+        tools = extract_mcp_tools(server.script_path)
+        
+        # Log para depuração
+        self.log(f"Encontradas {len(tools)} ferramentas MCP no servidor '{server_name}'")
+        for tool in tools:
+            self.log(f"  - {tool['name']}")
+        
+        if not tools:
+            message = (
+                f"Nenhuma ferramenta MCP encontrada no servidor '{server_name}'.\n\n"
+                "Possíveis soluções:\n"
+                "1. Verifique se o script utiliza o decorador @mcp.tool() corretamente.\n"
+                "2. Edite o script para usar log_level=\"ERROR\" na inicialização do FastMCP:\n"
+                "   mcp = FastMCP(\"{name}\", log_level=\"ERROR\")\n"
+                "3. Reinicie o servidor após fazer alterações.\n"
+                "4. Se estiver usando outro formato de MCP Server, verifique a documentação."
+            )
+            show_info_message("Ferramentas MCP", message)
+            
+            # Oferecer a opção de editar o script
+            if ask_yes_no("Editar Script", "Deseja abrir o script para edição?"):
+                self.edit_selected_server()
+            return
+        
+        # Criar janela de ferramentas
+        tools_window = tk.Toplevel(self)
+        tools_window.title(f"Ferramentas MCP - {server_name}")
+        tools_window.transient(self)  # Fazer esta janela filho da janela principal
+        tools_window.grab_set()  # Tornar a janela modal
+        
+        # Tamanho e posicionamento
+        tools_window.minsize(600, 500)  # Aumentado de 500x400 para 600x500
+        center_window(tools_window, 700, 600)  # Aumentado de 600x500 para 700x600
+        
+        # Configurar grid
+        tools_window.columnconfigure(0, weight=1)
+        tools_window.rowconfigure(0, weight=0)
+        tools_window.rowconfigure(1, weight=1)
+        
+        # Título
+        ttk.Label(
+            tools_window, 
+            text=f"Ferramentas do Servidor: {server_name}", 
+            font=("Arial", 12, "bold")
+        ).grid(row=0, column=0, sticky="w", padx=10, pady=10)
+        
+        # Frame principal
+        main_frame = ttk.Frame(tools_window)
+        main_frame.grid(row=1, column=0, sticky="nsew")
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(0, weight=1)
+        
+        # Criar notebook para organizar as ferramentas
+        tools_notebook = ttk.Notebook(main_frame)
+        tools_notebook.grid(row=0, column=0, sticky="nsew")
+        
+        # Adicionar uma aba para cada ferramenta (sem duplicações)
+        tab_names = set()  # Conjunto para controlar abas já adicionadas
+        for tool in tools:
+            # Pular se uma aba com este nome já foi adicionada
+            if tool["name"] in tab_names:
+                self.log(f"Aviso: Ferramenta duplicada '{tool['name']}' ignorada")
+                continue
+                
+            # Registrar o nome da aba
+            tab_names.add(tool["name"])
+            
+            # Criar a aba para esta ferramenta
+            tool_frame = ttk.Frame(tools_notebook, padding=10)
+            tools_notebook.add(tool_frame, text=tool["name"])
+            
+            # Configurar o frame da ferramenta
+            tool_frame.columnconfigure(0, weight=0)
+            tool_frame.columnconfigure(1, weight=1)
+            
+            # Adicionar descrição com título mais descritivo
+            ttk.Label(tool_frame, text="Documentação:", font=("Arial", 11, "bold")).grid(
+                row=0, column=0, sticky="nw", pady=(0, 5), padx=(0, 10)
+            )
+            
+            # Criar um frame para conter o texto com scrollbar, se necessário
+            desc_frame = ttk.Frame(tool_frame)
+            desc_frame.grid(row=0, column=1, sticky="ew", pady=(0, 10))
+            desc_frame.columnconfigure(0, weight=1)
+            
+            # Scrollbar vertical
+            scrollbar = ttk.Scrollbar(desc_frame, orient="vertical")
+            scrollbar.grid(row=0, column=1, sticky="ns")
+            
+            # Usar Text widget para docstring para permitir texto de várias linhas
+            desc_text = tk.Text(desc_frame, 
+                               wrap=tk.WORD, 
+                               height=15,  # Aumentado de 8 para 15
+                               width=60,   # Aumentado de 50 para 60
+                               yscrollcommand=scrollbar.set)
+            desc_text.grid(row=0, column=0, sticky="ew")
+            scrollbar.config(command=desc_text.yview)
+            
+            # Processar a docstring para melhor exibição
+            docstring = tool["docstring"]
+            
+            # Formatar a docstring para melhor legibilidade
+            # Formatação especial para docstrings que seguem o formato Google ou NumPy
+            formatted_docstring = docstring
+            
+            # Configurar o widget de texto com estilo
+            desc_text.tag_configure("bold", font=("Arial", 9, "bold"))
+            desc_text.tag_configure("italic", font=("Arial", 9, "italic"))
+            desc_text.tag_configure("normal", font=("Arial", 9))
+            desc_text.tag_configure("heading", font=("Arial", 9, "bold"), foreground="#333399")
+            desc_text.tag_configure("param_name", font=("Arial", 9, "bold"), foreground="#0066CC")
+            desc_text.tag_configure("param_type", font=("Arial", 9, "italic"), foreground="#006600")
+            desc_text.tag_configure("example_code", font=("Courier New", 9), background="#F0F0F0")
+            desc_text.tag_configure("note_text", font=("Arial", 9, "italic"), foreground="#666666")
+            
+            # Identificar possíveis seções na docstring (Args:, Returns:, etc)
+            lines = formatted_docstring.split('\n')
+            i = 0
+            in_examples = False
+            in_notes = False
+            example_block = False
+            
+            # Adicionar informações sobre parâmetros com valores padrão disponíveis
+            if "params" in tool and tool["params"]:
+                params_with_defaults = [p for p in tool["params"] if p.get("has_default", False)]
+                if params_with_defaults:
+                    desc_text.insert("end", "Parâmetros com valores padrão:\n", "heading")
+                    for param in params_with_defaults:
+                        param_name = param["name"]
+                        param_type = param["type"] if param["type"] else "não especificado"
+                        default_value = repr(param["default"]) if param["default"] is not None else "None"
+                        desc_text.insert("end", f"{param_name}", "param_name")
+                        desc_text.insert("end", f" ({param_type})", "param_type")
+                        desc_text.insert("end", f": valor padrão = {default_value}\n", "normal")
+                    desc_text.insert("end", "\n", "normal")
+            
+            while i < len(lines):
+                line = lines[i]
+                
+                # Detectar cabeçalhos de seção (Args:, Returns:, etc)
+                if line.strip().endswith(':') and line.strip().split()[0] in ['Args:', 'Returns:', 'Raises:', 'Examples:', 'Notes:', 'Parameters:', 'See:']:
+                    # Marcar se estamos entrando em seções especiais
+                    in_examples = line.strip().startswith('Examples:')
+                    in_notes = line.strip().startswith('Notes:')
+                    example_block = False
+                    
+                    # Inserir o cabeçalho com formatação
+                    if i > 0:
+                        desc_text.insert("end", "\n", "normal")
+                    desc_text.insert("end", line.strip() + "\n", "heading")
+                    
+                elif in_examples:
+                    # Dentro da seção Examples
+                    if line.strip().startswith('>>>'):
+                        # Início de um bloco de código
+                        example_block = True
+                        desc_text.insert("end", line + "\n", "example_code")
+                    elif example_block and not line.strip().startswith('>>>') and line.strip():
+                        # Continuação de um bloco de código (resultado)
+                        desc_text.insert("end", line + "\n", "example_code")
+                    elif not line.strip():
+                        # Linha vazia termina um bloco de exemplo
+                        example_block = False
+                        desc_text.insert("end", "\n", "normal")
+                    else:
+                        # Texto normal dentro de Examples
+                        example_block = False
+                        desc_text.insert("end", line + "\n", "normal")
+                        
+                elif in_notes:
+                    # Dentro da seção Notes
+                    desc_text.insert("end", line + "\n", "note_text")
+                    
+                elif ':' in line and not line.endswith(':') and len(line.split(':', 1)[0].strip().split()) == 1:
+                    # Parece ser um parâmetro no formato "name: description"
+                    parts = line.split(':', 1)
+                    param_name = parts[0].strip()
+                    
+                    # Verificar se há tipo em parênteses na descrição
+                    desc_text.insert("end", param_name + ":", "param_name")
+                    
+                    # Verificar se há tipo especificado (tipo) na descrição
+                    param_desc = parts[1].strip()
+                    type_match = re.match(r'\s*\(([^)]+)\)(.*)', param_desc)
+                    
+                    if type_match:
+                        param_type = type_match.group(1)
+                        rest_desc = type_match.group(2)
+                        desc_text.insert("end", " (", "normal")
+                        desc_text.insert("end", param_type, "param_type")
+                        desc_text.insert("end", ")" + rest_desc + "\n", "normal")
+                    else:
+                        desc_text.insert("end", " " + param_desc + "\n", "normal")
+                else:
+                    # Texto normal
+                    desc_text.insert("end", line + "\n", "normal")
+                i += 1
+            
+            # Remover a última linha em branco, se houver
+            content = desc_text.get("1.0", "end-1c")
+            if content.endswith('\n'):
+                desc_text.delete("end-2c", "end-1c")
+                
+            # Tornar somente leitura com melhor visual
+            desc_text.config(state="disabled", 
+                            bg="#f8f8f8", 
+                            bd=1, 
+                            relief="solid", 
+                            padx=5, 
+                            pady=5)
+        
+        # Botão de fechar
+        ttk.Button(
+            tools_window, 
+            text="Fechar", 
+            command=tools_window.destroy
+        ).grid(row=2, column=0, sticky="e", padx=10, pady=10)
 
 
 def main():
