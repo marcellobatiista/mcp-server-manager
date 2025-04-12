@@ -126,27 +126,58 @@ Para importar um servidor MCP existente:
 
 ## 📁 Estrutura do Projeto
 
+O projeto está organizado da seguinte maneira:
+
+### Diretórios Principais
 ```
 mcp-server-manager/
 │
-├── cli/                         # Módulos de interface de linha de comando
-│   ├── launcher.py              # Interface principal CLI
+├── mcp_server/                  # Servidores MCP implementados
+│   ├── demon.py                 # Servidor demon MCP de exemplo
+│   └── main.py                  # Ponto de entrada para servidores
+│
+├── cli/                         # Interface de linha de comando (CLI)
+│   ├── launcher.py              # Aplicação principal CLI
 │   ├── add_mcp.py               # Utilitário para adicionar novos servidores
-│   └── config_util.py           # Utilitário de configuração para Cursor e Claude Desktop
+│   └── config_util.py           # Utilitários de configuração
 │
-├── gui/                         # Módulos de interface gráfica
+├── gui/                         # Interface gráfica de usuário (GUI)
 │   ├── app.py                   # Aplicação principal GUI
-│   ├── server_manager.py        # Gerenciamento de servidores na GUI
-│   ├── config_manager.py        # Gerenciamento de configurações na GUI
-│   ├── utils.py                 # Utilitários para a interface gráfica
-│   └── assets/                  # Recursos gráficos (ícones, imagens, etc.)
+│   ├── server_manager.py        # Gerenciamento de servidores
+│   ├── config_manager.py        # Gerenciamento de configurações
+│   ├── utils.py                 # Utilitários e helpers
+│   └── assets/                  # Recursos gráficos
 │
-├── config/                      # Arquivos de configuração
+├── config/                      # Configurações do sistema
+│   ├── servers.json             # Lista de servidores disponíveis
+│   └── app_config.json          # Configurações da aplicação
 │
-├── tools/                       # Scripts auxiliares e utilitários
+├── tests/                       # Testes automatizados
+│   └── test_mcp_server.py       # Testes para verificar a estrutura do projeto
+│
+├── tools/                       # Scripts e ferramentas auxiliares
 │
 └── logs/                        # Registros de execução
 ```
+
+### Arquivos Principais
+- `quick_setup.py` - Configuração inicial automatizada
+- `cli-launcher.bat` - Atalho para iniciar a CLI
+- `gui-launcher.bat` - Atalho para iniciar a GUI
+- `requirements.txt` - Dependências do projeto
+
+### Arquivos de Configuração do Cliente
+O sistema interage com arquivos de configuração nas seguintes localizações:
+
+- **Cursor:** `%USERPROFILE%\.cursor\mcp.json`
+- **Claude Desktop (Windows):** `%USERPROFILE%\AppData\Roaming\Claude\claude_desktop_config.json`
+- **Claude Desktop (macOS):** `~/Library/Application Support/Claude/claude_desktop_config.json`
+
+### Testes
+O diretório `tests/` contém testes automatizados que verificam:
+- A existência da estrutura de diretórios esperada
+- A presença dos servidores MCP implementados
+- A configuração correta dos clientes Cursor/Claude Desktop
 
 ## 💡 Arquivos de Configuração
 
