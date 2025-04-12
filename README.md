@@ -118,9 +118,11 @@ O sistema gerencia arquivos de configuração nas seguintes localizações:
 - **Claude Desktop (Windows):** `%USERPROFILE%\AppData\Roaming\Claude\claude_desktop_config.json`
 - **Claude Desktop (macOS):** `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-## 🤝 Contribuição
+## ☕ Me Pague um Café
 
-Contribuições são bem-vindas! Sinta-se à vontade para abrir issues e enviar pull requests.
+Se este projeto foi útil para você, considere me pagar um cafezinho!
+
+[☕ Doar um Café](https://link.mercadopago.com.br/doarumcafe)
 
 ## 📄 Licença
 
