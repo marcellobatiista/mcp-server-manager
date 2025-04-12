@@ -877,3 +877,165 @@ def extract_mcp_resources(file_path):
         import traceback
         traceback.print_exc()
         return []
+
+
+def extract_mcp_prompts(file_path):
+    """
+    Extrai os prompts MCP de um arquivo Python.
+    
+    Args:
+        file_path (str): Caminho para o arquivo Python
+        
+    Returns:
+        list: Lista de dicionários com informações dos prompts MCP
+    """
+    prompts = []
+    # Conjunto para rastrear nomes de prompts já encontrados e evitar duplicações
+    prompt_names = set()
+    
+    try:
+        with open(file_path, 'r', encoding='utf-8') as f:
+            content = f.read()
+        
+        # Analisar o código Python
+        tree = ast.parse(content)
+        
+        # Procurar por funções decoradas com @mcp.prompt()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                # Pular se esta função já foi processada
+                if node.name in prompt_names:
+                    continue
+                    
+                # Verificar se a função tem decoradores
+                for decorator in node.decorator_list:
+                    # Procurar por diferentes formas do decorador @mcp.prompt()
+                    is_mcp_prompt = False
+                    prompt_name = None
+                    
+                    # Caso 1: @mcp.prompt(name="nome_prompt")
+                    if (isinstance(decorator, ast.Call) and 
+                        isinstance(decorator.func, ast.Attribute) and 
+                        decorator.func.attr == 'prompt' and 
+                        isinstance(decorator.func.value, ast.Name) and 
+                        decorator.func.value.id == 'mcp'):
+                        is_mcp_prompt = True
+                        
+                        # Tentar extrair o nome do prompt a partir dos argumentos do decorador
+                        for keyword in decorator.keywords:
+                            if keyword.arg == 'name' and isinstance(keyword.value, ast.Constant):
+                                prompt_name = keyword.value.value
+                                break
+                    
+                    # Caso 2: @mcp.prompt
+                    elif (isinstance(decorator, ast.Attribute) and 
+                          decorator.attr == 'prompt' and 
+                          isinstance(decorator.value, ast.Name) and 
+                          decorator.value.id == 'mcp'):
+                        is_mcp_prompt = True
+                        
+                    # Caso 3: @prompt (se a função mcp.prompt foi importada diretamente)
+                    elif (isinstance(decorator, ast.Name) and 
+                          decorator.id == 'prompt'):
+                        is_mcp_prompt = True
+                    
+                    if is_mcp_prompt:
+                        # Se não foi especificado um nome no decorador, usar o nome da função
+                        if not prompt_name:
+                            prompt_name = node.name
+                        
+                        # Adicionar o nome do prompt ao conjunto para evitar duplicações
+                        prompt_names.add(node.name)
+                        
+                        # Extrair a docstring com ast.get_docstring
+                        docstring = ast.get_docstring(node)
+                        
+                        # Tentar extrair diretamente do nó AST se não encontrado
+                        if not docstring:
+                            for item in node.body:
+                                if isinstance(item, ast.Expr) and hasattr(item.value, 'value') and isinstance(item.value.value, str):
+                                    docstring = item.value.value
+                                    break
+                                elif isinstance(item, ast.Expr) and isinstance(item.value, ast.Constant) and isinstance(item.value.s, str):
+                                    docstring = item.value.s
+                                    break
+                                elif isinstance(item, ast.Expr) and isinstance(item.value, ast.Str):
+                                    # Para Python 3.7 e versões anteriores
+                                    docstring = item.value.s
+                                    break
+                        
+                        # Método alternativo: Extrair usando expressões regulares
+                        if not docstring:
+                            import re
+                            
+                            # Obter a linha inicial da função
+                            lineno = node.lineno
+                            col_offset = node.col_offset
+                            
+                            # Extrair o conteúdo da função do código fonte
+                            func_pattern = rf"def\s+{node.name}\s*\(.*?\).*?:(.*?)(?=\n\s*[^\s\n]|\Z)"
+                            func_match = re.search(func_pattern, content, re.DOTALL)
+                            
+                            if func_match:
+                                func_body = func_match.group(1)
+                                
+                                # Procurar por docstrings com aspas triplas duplas
+                                doc_match = re.search(r'"""(.*?)"""', func_body, re.DOTALL)
+                                if doc_match:
+                                    docstring = doc_match.group(1)
+                                else:
+                                    # Procurar por docstrings com aspas triplas simples
+                                    doc_match = re.search(r"'''(.*?)'''", func_body, re.DOTALL)
+                                    if doc_match:
+                                        docstring = doc_match.group(1)
+                        
+                        # Se mesmo assim não encontrou, use uma mensagem padrão
+                        if not docstring:
+                            docstring = f"Prompt: {prompt_name} (sem descrição disponível)"
+                        
+                        # Limpar e formatar a docstring
+                        docstring = clean_docstring(docstring)
+                        
+                        # Tentar encontrar o conteúdo do prompt (geralmente é um return com uma string)
+                        prompt_content = None
+                        for item in node.body:
+                            if isinstance(item, ast.Return):
+                                if isinstance(item.value, ast.Constant) and isinstance(item.value.value, str):
+                                    prompt_content = item.value.value
+                                elif isinstance(item.value, ast.Str):  # Para compatibilidade com versões antigas
+                                    prompt_content = item.value.s
+                                break
+                        
+                        # Se não encontrou pelo AST, tentar com expressão regular
+                        if not prompt_content:
+                            try:
+                                import re
+                                # Encontrar o return na função
+                                return_pattern = rf"def\s+{node.name}\s*\(.*?\).*?:\s*(?:'''.*?'''|\"\"\".*?\"\"\")?\s*return\s+(?:'''(.*?)'''|\"\"\"(.*?)\"\"\"|\')(.*?)\'|\"(.*?)\")"
+                                return_match = re.search(return_pattern, content, re.DOTALL)
+                                
+                                if return_match:
+                                    # Obter o grupo que foi capturado (pode ser qualquer um dos grupos)
+                                    for group in return_match.groups():
+                                        if group:
+                                            prompt_content = group
+                                            break
+                            except:
+                                pass
+                        
+                        prompts.append({
+                            "name": prompt_name,
+                            "function_name": node.name,
+                            "docstring": docstring,
+                            "content": prompt_content
+                        })
+                        
+                        # Não continuar verificando outros decoradores desta função
+                        break
+        
+        return prompts
+    except Exception as e:
+        print(f"Erro ao extrair prompts MCP: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return []

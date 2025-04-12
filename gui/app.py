@@ -30,7 +30,8 @@ from gui.utils import (
     ask_yes_no,
     show_options_dialog,
     extract_mcp_tools,
-    extract_mcp_resources
+    extract_mcp_resources,
+    extract_mcp_prompts
 )
 
 # Importa o gerenciador de servidores
@@ -689,6 +690,15 @@ class MCPServerGUI(tk.Tk):
             state=tk.DISABLED
         )
         self.resources_button.pack(side=tk.LEFT, padx=(5, 0))
+        
+        # Botão de Prompts
+        self.prompts_button = ttk.Button(
+            row4, 
+            text="Prompts", 
+            command=self.show_server_prompts,
+            state=tk.DISABLED
+        )
+        self.prompts_button.pack(side=tk.LEFT, padx=(5, 0))
     
     def setup_logs_tab(self):
         """Configura a aba de logs."""
@@ -766,6 +776,7 @@ class MCPServerGUI(tk.Tk):
             self.remove_button.config(state=tk.DISABLED)
             self.tools_button.config(state=tk.DISABLED)
             self.resources_button.config(state=tk.DISABLED)
+            self.prompts_button.config(state=tk.DISABLED)
             return
         
         # Obter o servidor selecionado
@@ -791,11 +802,12 @@ class MCPServerGUI(tk.Tk):
                 self.stop_button.config(state=tk.DISABLED)
                 self.restart_button.config(state=tk.DISABLED)
             
-            # Sempre habilitar botões de edição, remoção, ferramentas e recursos
+            # Sempre habilitar botões de edição, remoção, ferramentas, recursos e prompts
             self.edit_button.config(state=tk.NORMAL)
             self.remove_button.config(state=tk.NORMAL)
             self.tools_button.config(state=tk.NORMAL)
             self.resources_button.config(state=tk.NORMAL)
+            self.prompts_button.config(state=tk.NORMAL)
     
     def update_server_details(self, server):
         """Atualiza as informações de detalhes do servidor selecionado."""
@@ -2222,6 +2234,206 @@ if __name__ == "__main__":
             resources_window, 
             text="Fechar", 
             command=resources_window.destroy
+        ).grid(row=2, column=0, sticky="e", padx=10, pady=10)
+
+    def show_server_prompts(self):
+        """Exibe uma janela com os prompts MCP do servidor selecionado."""
+        selection = self.servers_tree.selection()
+        if not selection:
+            return
+        
+        item = self.servers_tree.item(selection[0])
+        server_name = item["values"][0]
+        server = self.server_manager.get_server(server_name)
+        
+        if not server or not server.script_path or not os.path.exists(server.script_path):
+            show_error_message("Erro", "Arquivo de script do servidor não encontrado.")
+            return
+        
+        # Extrair os prompts MCP do arquivo do servidor
+        prompts = extract_mcp_prompts(server.script_path)
+        
+        # Log para depuração
+        self.log(f"Encontrados {len(prompts)} prompts MCP no servidor '{server_name}'")
+        for prompt in prompts:
+            self.log(f"  - {prompt['name']}")
+        
+        if not prompts:
+            message = (
+                f"Nenhum prompt MCP encontrado no servidor '{server_name}'.\n\n"
+                "Possíveis soluções:\n"
+                "1. Verifique se o script utiliza o decorador @mcp.prompt() corretamente.\n"
+                "2. Edite o script para usar log_level=\"ERROR\" na inicialização do FastMCP:\n"
+                "   mcp = FastMCP(\"{name}\", log_level=\"ERROR\")\n"
+                "3. Reinicie o servidor após fazer alterações.\n"
+                "4. Se estiver usando outro formato de MCP Server, verifique a documentação."
+            )
+            show_info_message("Prompts MCP", message)
+            
+            # Oferecer a opção de editar o script
+            if ask_yes_no("Editar Script", "Deseja abrir o script para edição?"):
+                self.edit_selected_server()
+            return
+        
+        # Criar janela de prompts
+        prompts_window = tk.Toplevel(self)
+        prompts_window.title(f"Prompts MCP - {server_name}")
+        prompts_window.transient(self)  # Fazer esta janela filho da janela principal
+        prompts_window.grab_set()  # Tornar a janela modal
+        
+        # Tamanho e posicionamento
+        prompts_window.minsize(650, 500)
+        center_window(prompts_window, 750, 600)
+        
+        # Configurar grid
+        prompts_window.columnconfigure(0, weight=1)
+        prompts_window.rowconfigure(0, weight=0)
+        prompts_window.rowconfigure(1, weight=1)
+        
+        # Título
+        ttk.Label(
+            prompts_window, 
+            text=f"Prompts do Servidor: {server_name}", 
+            font=("Arial", 12, "bold")
+        ).grid(row=0, column=0, sticky="w", padx=10, pady=10)
+        
+        # Frame principal - Reduzir padding para 0
+        main_frame = ttk.Frame(prompts_window, padding=(0, 0, 0, 0))
+        main_frame.grid(row=1, column=0, sticky="nsew", padx=0, pady=0)
+        main_frame.columnconfigure(0, weight=1)
+        main_frame.rowconfigure(0, weight=1)
+        
+        # Criar notebook para organizar os prompts
+        prompts_notebook = ttk.Notebook(main_frame)
+        prompts_notebook.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+        
+        # Adicionar uma aba para cada prompt (sem duplicações)
+        tab_names = set()  # Conjunto para controlar abas já adicionadas
+        for prompt in prompts:
+            # Pular se uma aba com este nome já foi adicionada
+            if prompt["name"] in tab_names:
+                self.log(f"Aviso: Prompt duplicado '{prompt['name']}' ignorado")
+                continue
+                
+            # Registrar o nome da aba
+            tab_names.add(prompt["name"])
+            
+            # Criar a aba para este prompt - Reduzir padding para mínimo necessário
+            prompt_frame = ttk.Frame(prompts_notebook, padding=(5, 5, 0, 5))
+            prompts_notebook.add(prompt_frame, text=prompt["name"])
+            
+            # Configurar o frame do prompt para usar um layout de duas colunas
+            prompt_frame.columnconfigure(0, weight=0)
+            prompt_frame.columnconfigure(1, weight=1)
+            prompt_frame.rowconfigure(0, weight=0)  # Documentação
+            prompt_frame.rowconfigure(1, weight=0)  # Separador
+            prompt_frame.rowconfigure(2, weight=1)  # Conteúdo
+            
+            # Adicionar descrição com título mais descritivo
+            ttk.Label(prompt_frame, text="Documentação:", font=("Arial", 11, "bold")).grid(
+                row=0, column=0, sticky="nw", pady=(0, 5), padx=(0, 10)
+            )
+            
+            # Criar um frame para conter o texto da documentação com scrollbar
+            doc_frame = ttk.Frame(prompt_frame)
+            doc_frame.grid(row=0, column=1, sticky="ew", pady=(0, 10))
+            doc_frame.columnconfigure(0, weight=1)
+            
+            # Scrollbar vertical para documentação
+            doc_scrollbar = ttk.Scrollbar(doc_frame, orient="vertical")
+            doc_scrollbar.grid(row=0, column=1, sticky="ns")
+            
+            # Usar Text widget para docstring
+            doc_text = tk.Text(doc_frame, 
+                              wrap=tk.WORD, 
+                              height=5,
+                              width=60,
+                              yscrollcommand=doc_scrollbar.set)
+            doc_text.grid(row=0, column=0, sticky="ew")
+            doc_scrollbar.config(command=doc_text.yview)
+            
+            # Processar e exibir a docstring
+            docstring = prompt["docstring"] if prompt["docstring"] else "Sem documentação disponível."
+            doc_text.insert("end", docstring)
+            
+            # Configurações visuais do campo de documentação
+            doc_text.config(state="disabled", 
+                           bg="#f8f8f8", 
+                           bd=1, 
+                           relief="solid", 
+                           padx=5, 
+                           pady=5)
+            
+            # Adicionar separador
+            ttk.Separator(prompt_frame, orient="horizontal").grid(
+                row=1, column=0, columnspan=2, sticky="ew", pady=10
+            )
+            
+            # Adicionar título para o conteúdo do prompt
+            ttk.Label(prompt_frame, text="Conteúdo:", font=("Arial", 11, "bold")).grid(
+                row=2, column=0, sticky="nw", pady=(0, 5), padx=(0, 10)
+            )
+            
+            # Criar um frame para conter o texto do conteúdo do prompt com scrollbar
+            content_frame = ttk.Frame(prompt_frame)
+            content_frame.grid(row=2, column=1, sticky="nsew", pady=(0, 0), padx=(0, 0))
+            content_frame.columnconfigure(0, weight=1)
+            content_frame.rowconfigure(0, weight=1)
+            
+            # Scrollbar vertical para conteúdo
+            content_scrollbar = ttk.Scrollbar(content_frame, orient="vertical")
+            content_scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 0))
+            
+            # Usar Text widget para o conteúdo do prompt - Aumentar largura
+            content_text = tk.Text(content_frame, 
+                                  wrap=tk.WORD, 
+                                  height=15,
+                                  width=70,
+                                  yscrollcommand=content_scrollbar.set)
+            content_text.grid(row=0, column=0, sticky="nsew", padx=0, pady=0)
+            content_scrollbar.config(command=content_text.yview)
+            
+            # Processar e exibir o conteúdo do prompt
+            prompt_content = prompt.get("content")
+            if prompt_content:
+                # Remover indentação desnecessária do prompt
+                lines = prompt_content.splitlines()
+                # Determinar a indentação mínima (exceto linhas vazias)
+                min_indent = float('inf')
+                for line in lines:
+                    if line.strip():  # Ignorar linhas vazias
+                        spaces = len(line) - len(line.lstrip())
+                        min_indent = min(min_indent, spaces)
+                
+                # Se encontrou indentação mínima, remover esse número de espaços de cada linha
+                if min_indent != float('inf'):
+                    processed_lines = []
+                    for line in lines:
+                        if line.strip():  # Se a linha não estiver vazia
+                            processed_lines.append(line[min_indent:])
+                        else:
+                            processed_lines.append(line)
+                    processed_content = '\n'.join(processed_lines)
+                else:
+                    processed_content = prompt_content
+                
+                content_text.insert("end", processed_content)
+            else:
+                content_text.insert("end", "Conteúdo do prompt não disponível.")
+            
+            # Configurações visuais do campo de conteúdo - Margins 0
+            content_text.config(state="disabled", 
+                               bg="#f8f8f8", 
+                               bd=1, 
+                               relief="solid", 
+                               padx=0, 
+                               pady=0)
+        
+        # Botão de fechar
+        ttk.Button(
+            prompts_window, 
+            text="Fechar", 
+            command=prompts_window.destroy
         ).grid(row=2, column=0, sticky="e", padx=10, pady=10)
 
 
