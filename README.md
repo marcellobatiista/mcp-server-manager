@@ -9,6 +9,7 @@ Um gerenciador de servidores MCP (Model Control Protocol) para Cursor e Claude D
 - **Configuração Automática:** Integração com Cursor e Claude Desktop
 - **Detecção de Processos:** Identificação automática de servidores em execução
 - **Quick Setup:** Sistema de configuração rápida para novos ambientes
+- **Importação de Servidores:** Capacidade de importar servidores MCP existentes através da interface gráfica
 
 ## 🔍 Escopo do Projeto
 
@@ -114,6 +115,14 @@ Ou diretamente pelo Python:
 ```
 python gui/app.py
 ```
+
+### Importação de Servidores
+
+Para importar um servidor MCP existente:
+1. Inicie a interface gráfica
+2. Na aba de gerenciamento de servidores, clique no botão "Importar Servidor"
+3. Selecione o arquivo Python (.py) do servidor que deseja importar
+4. O sistema copiará o arquivo para o diretório de servidores MCP e o adicionará à lista de servidores disponíveis
 
 ## 📁 Estrutura do Projeto
 

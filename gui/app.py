@@ -533,6 +533,13 @@ class MCPServerGUI(tk.Tk):
         )
         add_button.pack(side=tk.LEFT, padx=5)
         
+        import_button = ttk.Button(
+            actions_frame, 
+            text="Importar Servidor", 
+            command=self.import_server
+        )
+        import_button.pack(side=tk.LEFT, padx=5)
+        
         # Contador de servidores ativos
         self.active_servers_label = ttk.Label(actions_frame, text="Servidores ativos: 0")
         self.active_servers_label.pack(side=tk.RIGHT, padx=(10, 0))
@@ -1887,6 +1894,91 @@ if __name__ == "__main__":
             text="Fechar", 
             command=tools_window.destroy
         ).grid(row=2, column=0, sticky="e", padx=10, pady=10)
+
+    def import_server(self):
+        """Importa um arquivo de servidor Python existente."""
+        # Abrir diálogo para selecionar arquivo
+        file_path = filedialog.askopenfilename(
+            title="Selecionar Arquivo de Servidor",
+            filetypes=[("Arquivos Python", "*.py"), ("Todos os arquivos", "*.*")],
+            initialdir=os.path.expanduser("~")
+        )
+        
+        if not file_path:
+            return  # Usuário cancelou
+            
+        # Verificar se o arquivo existe
+        if not os.path.exists(file_path):
+            show_error_message("Erro", f"O arquivo {file_path} não existe.")
+            return
+            
+        # Obter nome do arquivo sem extensão para usar como nome do servidor
+        file_name = os.path.basename(file_path)
+        server_name = os.path.splitext(file_name)[0]
+        
+        # Obter o diretório raiz do projeto
+        project_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        
+        # Definir caminho do diretório mcp_server
+        mcp_server_dir = os.path.join(project_dir, "mcp_server")
+        
+        # Verificar se o diretório existe
+        if not os.path.exists(mcp_server_dir):
+            show_error_message(
+                "Erro", 
+                f"A pasta mcp_server não foi encontrada em: {project_dir}"
+            )
+            return
+            
+        # Caminho para onde o arquivo será copiado
+        dest_path = os.path.join(mcp_server_dir, file_name)
+        
+        # Verificar se já existe um arquivo com o mesmo nome no destino
+        if os.path.exists(dest_path) and file_path != dest_path:
+            if not ask_yes_no(
+                "Arquivo existente", 
+                f"Já existe um arquivo com o nome '{file_name}' na pasta mcp_server. Deseja substituí-lo?"
+            ):
+                return
+                
+        try:
+            # Copiar o arquivo para a pasta mcp_server (se não for o mesmo arquivo)
+            if file_path != dest_path:
+                # Ler o conteúdo do arquivo de origem
+                with open(file_path, 'r', encoding='utf-8') as src_file:
+                    content = src_file.read()
+                    
+                # Escrever o conteúdo no arquivo de destino
+                with open(dest_path, 'w', encoding='utf-8') as dest_file:
+                    dest_file.write(content)
+                    
+                self.log(f"Arquivo '{file_name}' copiado para '{mcp_server_dir}'")
+            
+            # Adicionar novo servidor ao gerenciador
+            server = Server(server_name, dest_path, None)
+            if self.server_manager.add_server(server):
+                # Atualizar as configurações dos clientes
+                self._update_client_configs(server_name, dest_path, mcp_server_dir)
+                
+                self.update_status(f"Servidor '{server_name}' importado com sucesso")
+                # Atualizar a lista de servidores
+                self._refresh_servers_tree(server_name)
+                
+                # Mostrar mensagem de sucesso
+                show_info_message(
+                    "Importação concluída", 
+                    f"O servidor '{server_name}' foi importado com sucesso e está pronto para uso."
+                )
+            else:
+                self.update_status(f"Erro ao adicionar servidor '{server_name}'")
+                self.log(f"Falha ao adicionar servidor '{server_name}' após importação")
+                
+        except Exception as e:
+            show_error_message(
+                "Erro ao importar servidor", 
+                f"Ocorreu um erro durante a importação: {str(e)}"
+            )
+            self.log(f"Erro ao importar servidor de {file_path}: {str(e)}")
 
 
 def main():
