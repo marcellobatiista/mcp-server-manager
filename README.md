@@ -10,6 +10,17 @@ Um gerenciador de servidores MCP (Model Control Protocol) para Cursor e Claude D
 - **Detecção de Processos:** Identificação automática de servidores em execução
 - **Quick Setup:** Sistema de configuração rápida para novos ambientes
 
+## 📸 Screenshots
+
+### Interface Gráfica (GUI)
+![Interface Gráfica](gui/assets/screenshorts/gui-menu.png)
+
+### Interface de Linha de Comando (CLI)
+![Interface de Linha de Comando](gui/assets/screenshorts/cli-menu.png)
+
+### Integração com Cursor
+![Cursor MCP Servers](gui/assets/screenshorts/cursor-servers.png)
+
 ## 🛠️ Tecnologias Utilizadas
 
 - Python 3.10+
