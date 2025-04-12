@@ -10,6 +10,35 @@ Um gerenciador de servidores MCP (Model Control Protocol) para Cursor e Claude D
 - **Detecção de Processos:** Identificação automática de servidores em execução
 - **Quick Setup:** Sistema de configuração rápida para novos ambientes
 
+## 🔍 Escopo do Projeto
+
+### Limitações Atuais
+
+**Importante:** Esta versão do MCP Server Manager atualmente suporta apenas servidores MCP locais.
+
+#### O que isso significa:
+
+- ✅ **Servidores Locais**: O projeto permite criar, configurar e executar servidores MCP que rodam na mesma máquina que o cliente LLM
+- ✅ **Transporte stdio**: Os servidores implementados usam entrada/saída padrão para comunicação
+- ❌ **Servidores Remotos**: Atualmente não há suporte para servidores MCP remotos via HTTP/SSE
+- ❌ **Autenticação OAuth**: Não implementamos ainda a autenticação necessária para servidores remotos
+
+#### Detalhes Técnicos
+
+Os servidores criados por este gerenciador:
+- Utilizam exclusivamente o transporte `stdio` para comunicação
+- São executados como processos locais
+- Não possuem endpoints HTTP expostos externamente
+- São adequados para testes e desenvolvimento local
+
+#### Roadmap Futuro
+
+Em versões futuras, pretendemos adicionar:
+- [ ] Suporte para servidores MCP remotos via HTTP/SSE
+- [ ] Integração com autenticação OAuth para acesso seguro
+- [ ] Hospedagem simplificada de servidores em ambientes cloud
+- [ ] Interface para gerenciamento de servidores remotos
+
 ## 📸 Screenshots
 
 ### Interface Gráfica (GUI)
