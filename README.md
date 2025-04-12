@@ -43,6 +43,14 @@ Um gerenciador de servidores MCP (Model Control Protocol) para Cursor e Claude D
 
 ## 📚 Como Usar
 
+### Comando Global 'mcp'
+
+Após executar o `quick_setup.py` com sucesso, você pode iniciar a interface gráfica do MCP a partir de qualquer local usando o comando:
+```
+mcp
+```
+> ℹ️ **Observação**: É necessário abrir um novo prompt de comando após a instalação para que o comando funcione.
+
 ### Interface de Linha de Comando (CLI)
 
 Para iniciar a interface CLI:

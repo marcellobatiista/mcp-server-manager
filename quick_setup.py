@@ -237,6 +237,77 @@ print("s")    # Responder 's' para sobrescrever o diretório existente
             self.logger.error(f"❌ Erro ao criar arquivo cli-launcher.bat: {e}")
             return False
     
+    def adicionar_a_path(self):
+        """Adiciona o gui-launcher.bat ao PATH do sistema para ser executado como 'mcp'."""
+        self.cabecalho("ADICIONANDO COMANDO 'MCP' AO SISTEMA")
+        
+        try:
+            # Obter o caminho absoluto do diretório atual
+            diretorio_atual = os.path.abspath(os.getcwd())
+            caminho_batch = os.path.join(diretorio_atual, "gui-launcher.bat")
+            
+            # Verificar se o arquivo existe
+            if not os.path.exists(caminho_batch):
+                self.logger.error(f"❌ Arquivo gui-launcher.bat não encontrado em {caminho_batch}")
+                return False
+                
+            # Criar script que adiciona o comando 'mcp' ao PATH
+            conteudo_script = f"""
+@echo off
+setlocal EnableDelayedExpansion
+
+:: Criar um script BAT para o comando 'mcp'
+set "MCP_COMMAND=%USERPROFILE%\\mcp.bat"
+(
+echo @echo off
+echo cd /d "{diretorio_atual}"
+echo {caminho_batch} %*
+) > "%MCP_COMMAND%"
+
+:: Adicionar o diretório do usuário ao PATH se ainda não estiver
+for /f "tokens=2*" %%A in ('reg query "HKCU\\Environment" /v PATH 2^>nul ^| find "PATH"') do set "USER_PATH=%%B"
+echo PATH atual: !USER_PATH!
+
+:: Verificar se %USERPROFILE% já está no PATH
+echo !USER_PATH! | findstr /C:"%USERPROFILE%" > nul
+if errorlevel 1 (
+    if defined USER_PATH (
+        setx PATH "!USER_PATH!;%%USERPROFILE%%"
+    ) else (
+        setx PATH "%%USERPROFILE%%"
+    )
+    echo [OK] Adicionado %%USERPROFILE%% ao PATH do usuario
+) else (
+    echo [OK] %%USERPROFILE%% ja esta no PATH do usuario
+)
+
+echo [OK] Comando 'mcp' configurado com sucesso!
+echo.
+echo Para usar, abra um NOVO prompt de comando e digite: mcp
+exit /b 0
+            """
+            
+            # Salvar o script temporário
+            script_path = "setup_mcp_command.bat"
+            self.criar_arquivo_temporario(script_path, conteudo_script, encoding="cp1252")
+            
+            # Executar o script com privilégios elevados, se possível
+            if self.sistema == "Windows":
+                self.executar_comando([script_path], mostrar_saida=True, shell=True)
+                self.logger.info("✅ Comando 'mcp' configurado com sucesso!")
+                self.logger.info("ℹ️ Abra um novo prompt de comando e digite 'mcp' para usar.")
+                return True
+            else:
+                self.logger.warning("⚠️ A configuração do comando 'mcp' só é suportada no Windows.")
+                return False
+                
+        except Exception as e:
+            self.logger.error(f"❌ Erro ao configurar comando 'mcp': {e}")
+            return False
+        finally:
+            # Limpeza dos arquivos temporários
+            self.limpar_arquivos_temporarios()
+    
     def ir_para_launcher(self):
         """Executa o script launcher.py para começar a gerenciar os servidores."""
         self.cabecalho("INICIANDO LAUNCHER")
@@ -279,6 +350,7 @@ print("s")    # Responder 's' para sobrescrever o diretório existente
             self.criar_projeto()
             self.ativar_ambiente()
             self.criar_launcher_bat()
+            self.adicionar_a_path()
             
             print("\n✅ Configuração rápida concluída com sucesso!")
             print("Agora você pode executar o launcher para gerenciar seus servidores.")
