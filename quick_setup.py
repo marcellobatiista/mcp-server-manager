@@ -225,16 +225,16 @@ print("s")    # Responder 's' para sobrescrever o diretório existente
         """Cria um arquivo batch para facilitar a execução do launcher."""
         try:
             launcher_script = os.path.join('cli', 'launcher.py')
-            # Criar arquivo launcher.bat
-            with open("launcher.bat", "w", encoding="cp1252") as f:
+            # Criar arquivo cli-launcher.bat
+            with open("cli-launcher.bat", "w", encoding="cp1252") as f:
                 f.write("@echo off\n")
                 f.write("echo Iniciando MCP Launcher...\n")
                 f.write(f"{self.python_exe} {launcher_script}\n")
             
-            self.logger.info("✅ Criado arquivo 'launcher.bat' para execução rápida")
+            self.logger.info("✅ Criado arquivo 'cli-launcher.bat' para execução rápida")
             return True
         except Exception as e:
-            self.logger.error(f"❌ Erro ao criar arquivo launcher.bat: {e}")
+            self.logger.error(f"❌ Erro ao criar arquivo cli-launcher.bat: {e}")
             return False
     
     def ir_para_launcher(self):

@@ -21,6 +21,8 @@ var/
 *.egg
 logs/
 config/
+mcp_server/
+log.txt
 
 # Ambiente virtual
 venv/
