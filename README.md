@@ -1,105 +1,108 @@
-# MCP_SERVER
+# MCP Server Manager
 
-Plataforma para criação, gerenciamento e execução de servidores MCP (Model Context Protocol).
+Um gerenciador de servidores MCP (Model Control Protocol) para Cursor e Claude Desktop, proporcionando interfaces de linha de comando (CLI) e gráfica (GUI) para facilitar o gerenciamento de servidores MCP.
 
-## Estrutura do Projeto
+## 📋 Funcionalidades
 
-- `cli/`: Ferramentas de linha de comando para gerenciamento de servidores
-  - `launcher.py`: Interface principal para gerenciar servidores MCP
-  - `add_mcp.py`: Utilitário para adicionar novos servidores personalizados
-  - `config_util.py`: Módulo de utilitários para configuração
+- **Gerenciamento de Servidores MCP:** Iniciar, parar, reiniciar e monitorar servidores MCP
+- **Interface Dupla:** Interface de linha de comando e interface gráfica
+- **Configuração Automática:** Integração com Cursor e Claude Desktop
+- **Detecção de Processos:** Identificação automática de servidores em execução
+- **Quick Setup:** Sistema de configuração rápida para novos ambientes
 
-- `gui/`: Interface gráfica para gerenciamento de servidores
-  - `app.py`: Aplicação principal da interface gráfica
-  - `server_manager.py`: Gerenciador de servidores 
-  - `config_manager.py`: Gerenciador de configurações
-  - `utils.py`: Utilitários para a interface gráfica
-  
-- `mcp_server/`: Diretório onde ficam os scripts dos servidores MCP
+## 🛠️ Tecnologias Utilizadas
 
-- `tools/`: Scripts auxiliares para configuração de ambiente
-  - `instalar_uv.py`: Instalação do gerenciador de pacotes UV
-  - `criar_projeto_mcp.py`: Criação da estrutura de projeto
-  - `ativar_ambiente.py`: Ativação do ambiente virtual
+- Python 3.10+
+- GUI com Tkinter e ttkthemes
+- CLI com Rich para interface colorida e formatada
+- Gestão de configuração TOML
 
-- `config/`: Arquivos de configuração
-  - `servers.json`: Configuração dos servidores MCP
-  - `app_config.json`: Configuração da aplicação gráfica
+## 🚀 Instalação
 
-- `quick_setup.py`: Configuração inicial automatizada
-- `log.txt`: Arquivo de registro da instalação
-- `requirements.txt`: Lista de dependências do projeto
+### Requisitos
+- Python 3.10 ou superior
+- Pip (gerenciador de pacotes Python)
 
-## Arquivos de Atalho
+### Passos para Instalação
 
-- `launcher.bat`: Atalho para iniciar o gerenciador de servidores
-- `add_mcp.bat`: Atalho para adicionar novos servidores
+1. Clone o repositório:
+   ```
+   git clone https://github.com/marcellobatiista/mcp-server-manager.git
+   cd mcp-server-manager
+   ```
 
-## Instalação e Uso
+2. Instale as dependências:
+   ```
+   pip install -r requirements.txt
+   ```
 
-### Configuração Inicial
+3. Execute o setup rápido:
+   ```
+   python quick_setup.py
+   ```
 
-Para configurar o ambiente pela primeira vez:
+## 📚 Como Usar
 
-```bash
-python quick_setup.py
+### Interface de Linha de Comando (CLI)
+
+Para iniciar a interface CLI:
+```
+.\cli-launcher.bat
 ```
 
-### Interface Gráfica (Recomendada)
-
-Para iniciar a interface gráfica:
-
-```bash
-python gui/app.py
+Ou diretamente pelo Python:
 ```
-
-A interface gráfica oferece:
-- Gerenciamento visual de servidores MCP
-- Monitoramento de status em tempo real
-- Iniciar, parar e reiniciar servidores
-- Gerenciamento de configurações
-- Visualização de logs
-
-### Interface de Linha de Comando
-
-Para iniciar o gerenciador de servidores via terminal:
-
-```bash
 python cli/launcher.py
 ```
 
-Ou simplesmente use o atalho:
+### Interface Gráfica (GUI)
 
-```bash
-launcher.bat
+Para iniciar a interface gráfica:
+```
+.\gui-launcher.bat
 ```
 
-### Adicionar Novo Servidor
-
-Para adicionar um novo servidor personalizado via terminal:
-
-```bash
-python cli/add_mcp.py
+Ou diretamente pelo Python:
+```
+python gui/app.py
 ```
 
-Ou use o atalho:
+## 📁 Estrutura do Projeto
 
-```bash
-add_mcp.bat
+```
+mcp-server-manager/
+│
+├── cli/                         # Módulos de interface de linha de comando
+│   ├── launcher.py              # Interface principal CLI
+│   ├── add_mcp.py               # Utilitário para adicionar novos servidores
+│   └── config_util.py           # Utilitário de configuração para Cursor e Claude Desktop
+│
+├── gui/                         # Módulos de interface gráfica
+│   ├── app.py                   # Aplicação principal GUI
+│   ├── server_manager.py        # Gerenciamento de servidores na GUI
+│   ├── config_manager.py        # Gerenciamento de configurações na GUI
+│   ├── utils.py                 # Utilitários para a interface gráfica
+│   └── assets/                  # Recursos gráficos (ícones, imagens, etc.)
+│
+├── config/                      # Arquivos de configuração
+│
+├── tools/                       # Scripts auxiliares e utilitários
+│
+└── logs/                        # Registros de execução
 ```
 
-## Arquivos de Configuração
+## 💡 Arquivos de Configuração
 
-Os servidores MCP são configurados automaticamente nos seguintes locais:
+O sistema gerencia arquivos de configuração nas seguintes localizações:
 
-- Cursor: `~/.cursor/mcp.json`
-- Claude Desktop (Windows): `%USERPROFILE%\AppData\Roaming\Claude\claude_desktop_config.json`
-- Claude Desktop (macOS): `~/Library/Application Support/Claude/claude_desktop_config.json`
+- **Cursor:** `~/.cursor/mcp.json`
+- **Claude Desktop (Windows):** `%USERPROFILE%\AppData\Roaming\Claude\claude_desktop_config.json`
+- **Claude Desktop (macOS):** `~/Library/Application Support/Claude/claude_desktop_config.json`
 
-## Recursos da Interface Gráfica
+## 🤝 Contribuição
 
-- **Sistema de Temas**: Suporte a temas para personalização da interface
-- **Verificação Automática**: Monitoramento em tempo real do status dos servidores
-- **Gerenciamento Simplificado**: Criação e edição de servidores com apenas alguns cliques
-- **Logs Integrados**: Visualização e exportação de logs do sistema
-- **Configurações Acessíveis**: Interface intuitiva para gerenciar configurações
+Contribuições são bem-vindas! Sinta-se à vontade para abrir issues e enviar pull requests.
+
+## 📄 Licença
+
+Este projeto está licenciado sob os termos da [Licença MIT](LICENSE).
