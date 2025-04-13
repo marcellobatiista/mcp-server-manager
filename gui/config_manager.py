@@ -26,6 +26,24 @@ from gui.utils import (
     show_info_message
 )
 
+# Gera o conteúdo do script para mostrar mensagem colorida no terminal
+UV_WARNING_SCRIPT = '''
+try:
+    from rich.console import Console
+    from rich import print as rprint
+    
+    console = Console()
+    
+    console.print("\\n[bold]IMPORTANTE:[/bold] Para instalar pacotes neste ambiente use ", 
+                 "[bold green]uv pip install [pacote][/bold green]", 
+                 " em vez de ", 
+                 "[bold red]pip install [pacote][/bold red]", 
+                 ".")
+    console.print("Saiba mais sobre o UV em [link]https://github.com/astral-sh/uv[/link]\\n")
+except ImportError:
+    print("\\nIMPORTANTE: Para instalar pacotes neste ambiente use 'uv pip install [pacote]' em vez de 'pip install [pacote]'.\\n")
+'''
+
 class ConfigManager(ttk.Frame):
     """
     Gerenciador de configurações para a aplicação MCP Server.
@@ -44,6 +62,7 @@ class ConfigManager(ttk.Frame):
             "python_path": sys.executable,
             "log_dir": os.path.join(Path(__file__).resolve().parent.parent, "logs"),
             "data_dir": os.path.join(Path(__file__).resolve().parent.parent, "data"),
+            "venv_path": os.path.join(Path(__file__).resolve().parent.parent, "mcp_server"),
             "theme": "default"  # Usando 'default' como tema padrão
         }
         
@@ -127,6 +146,22 @@ class ConfigManager(ttk.Frame):
         ttk.Label(log_dir_frame, text="Diretório de Logs:").pack(side=tk.LEFT)
         self.log_dir_label = self._create_link_label(log_dir_frame, self.config["log_dir"])
         self.log_dir_label.pack(side=tk.LEFT, padx=5)
+        
+        # Ambiente Virtual
+        venv_frame = ttk.Frame(general_frame, padding=5)
+        venv_frame.pack(fill=tk.X)
+        
+        ttk.Label(venv_frame, text="Ambiente Virtual dos Servidores:").pack(side=tk.LEFT)
+        self.venv_path_label = self._create_link_label(venv_frame, self.config["venv_path"])
+        self.venv_path_label.pack(side=tk.LEFT, padx=5)
+        
+        # Botão para abrir terminal com ambiente virtual ativado
+        open_terminal_btn = ttk.Button(
+            venv_frame,
+            text="Abrir terminal do ambiente",
+            command=self._show_terminal_menu
+        )
+        open_terminal_btn.pack(side=tk.RIGHT, padx=5)
         
         # Tema - modificado para mostrar temas nativos disponíveis
         theme_frame = ttk.Frame(general_frame, padding=5)
@@ -266,6 +301,150 @@ class ConfigManager(ttk.Frame):
         except Exception as e:
             show_error_message("Erro", f"Erro ao abrir o caminho: {str(e)}")
     
+    def _show_terminal_menu(self, event=None):
+        """
+        Mostra um menu de contexto para escolher o tipo de terminal.
+        """
+        # Criar um menu de contexto
+        terminal_menu = tk.Menu(self, tearoff=0)
+        terminal_menu.add_command(label="CMD", command=lambda: self._open_venv_terminal("cmd"))
+        terminal_menu.add_command(label="PowerShell", command=lambda: self._open_venv_terminal("powershell"))
+        
+        # Verificar se o Git Bash está instalado - verificar caminhos comuns
+        git_bash_paths = [
+            os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'), 'Git', 'bin', 'bash.exe'),
+            os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'), 'Git', 'usr', 'bin', 'bash.exe'),
+            os.path.join(os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)'), 'Git', 'bin', 'bash.exe'),
+            os.path.join(os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)'), 'Git', 'usr', 'bin', 'bash.exe')
+        ]
+        
+        git_bash_path = None
+        for path in git_bash_paths:
+            if os.path.exists(path):
+                git_bash_path = path
+                break
+        
+        if git_bash_path:
+            terminal_menu.add_command(label="Git Bash", command=lambda: self._open_venv_terminal("git-bash", git_bash_path))
+        
+        # Obter widget que acionou o evento (botão)
+        widget = event.widget if event else self.winfo_containing(
+            self.winfo_pointerx(), self.winfo_pointery()
+        )
+        
+        # Mostrar o menu abaixo do botão
+        terminal_menu.tk_popup(
+            widget.winfo_rootx(), 
+            widget.winfo_rooty() + widget.winfo_height()
+        )
+    
+    def _open_venv_terminal(self, terminal_type="cmd", git_bash_path=None):
+        """
+        Abre um terminal com o ambiente virtual ativado.
+        
+        Args:
+            terminal_type: Tipo de terminal a ser aberto (cmd, powershell, git-bash)
+            git_bash_path: Caminho para o executável do Git Bash (opcional)
+        """
+        try:
+            venv_path = self.config["venv_path"]
+            
+            if not os.path.exists(venv_path):
+                os.makedirs(venv_path, exist_ok=True)
+                show_info_message(
+                    "Ambiente Virtual", 
+                    f"O diretório do ambiente virtual foi criado em: {venv_path}"
+                )
+            
+            # Determinar o caminho do ambiente virtual
+            activate_script_win = os.path.join(venv_path, ".venv", "Scripts", "activate.bat")
+            activate_script_ps = os.path.join(venv_path, ".venv", "Scripts", "Activate.ps1")
+            
+            # Verificar se existe uma pasta .venv
+            venv_folder = os.path.join(venv_path, ".venv")
+            venv_exists = os.path.exists(venv_folder)
+            
+            # Criar arquivo temporário com script para exibir a mensagem colorida
+            uv_warning_script_path = os.path.join(venv_path, ".uv_warning.py")
+            with open(uv_warning_script_path, 'w', encoding='utf-8') as f:
+                f.write(UV_WARNING_SCRIPT)
+            
+            # Abrir terminal selecionado
+            if terminal_type == "cmd":
+                # CMD
+                if venv_exists and os.path.exists(activate_script_win):
+                    activate_cmd = f'start cmd.exe /K "cd /d "{venv_path}" && "{activate_script_win}" && python .uv_warning.py"'
+                else:
+                    if venv_exists:
+                        show_error_message("Ambiente Virtual", "Pasta .venv encontrada, mas script de ativação não localizado.")
+                        activate_cmd = f'start cmd.exe /K "cd /d "{venv_path}" && python .uv_warning.py"'
+                    else:
+                        show_info_message("Ambiente Virtual", "Ambiente virtual não encontrado. Será necessário criar com 'python -m venv .venv'")
+                        activate_cmd = f'start cmd.exe /K "cd /d "{venv_path}" && echo Ambiente virtual nao encontrado. Use python -m venv .venv para criar && python .uv_warning.py"'
+                os.system(activate_cmd)
+                
+            elif terminal_type == "powershell":
+                # PowerShell
+                if venv_exists and os.path.exists(activate_script_ps):
+                    activate_cmd = f'start powershell -NoExit -Command "cd \'{venv_path}\'; & \'{activate_script_ps}\'; python .uv_warning.py"'
+                else:
+                    if venv_exists:
+                        show_error_message("Ambiente Virtual", "Pasta .venv encontrada, mas script de ativação do PowerShell não localizado.")
+                        activate_cmd = f'start powershell -NoExit -Command "cd \'{venv_path}\'; python .uv_warning.py"'
+                    else:
+                        show_info_message("Ambiente Virtual", "Ambiente virtual não encontrado. Será necessário criar com 'python -m venv .venv'")
+                        activate_cmd = f'start powershell -NoExit -Command "cd \'{venv_path}\'; Write-Host \'Ambiente virtual nao encontrado. Use python -m venv .venv para criar\'; python .uv_warning.py"'
+                os.system(activate_cmd)
+                
+            elif terminal_type == "git-bash":
+                # Git Bash
+                if not git_bash_path:
+                    # Se não foi passado o caminho, tentar encontrar
+                    git_bash_paths = [
+                        os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'), 'Git', 'bin', 'bash.exe'),
+                        os.path.join(os.environ.get('ProgramFiles', 'C:\\Program Files'), 'Git', 'usr', 'bin', 'bash.exe'),
+                        os.path.join(os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)'), 'Git', 'bin', 'bash.exe'),
+                        os.path.join(os.environ.get('ProgramFiles(x86)', 'C:\\Program Files (x86)'), 'Git', 'usr', 'bin', 'bash.exe')
+                    ]
+                    
+                    for path in git_bash_paths:
+                        if os.path.exists(path):
+                            git_bash_path = path
+                            break
+                
+                if not git_bash_path or not os.path.exists(git_bash_path):
+                    show_error_message("Git Bash", "Não foi possível encontrar o Git Bash. Verifique se está instalado.")
+                    return
+                
+                # Ajustar o caminho para o formato Unix (usar barras em vez de contrabarras)
+                venv_path_unix = venv_path.replace("\\", "/")
+                
+                if venv_exists:
+                    # Git Bash - tentar ativar ambiente virtual
+                    # Encontrar o script de ativação bash
+                    bash_activate = os.path.join(venv_path, ".venv", "Scripts", "activate")
+                    
+                    # Ajustar caminho para formato Unix
+                    bash_activate_unix = bash_activate.replace("\\", "/")
+                    
+                    if os.path.exists(bash_activate):
+                        cmd = f'start "" "{git_bash_path}" --login -i -c "cd \'{venv_path_unix}\' && source \'{bash_activate_unix}\' && python .uv_warning.py; exec bash"'
+                    else:
+                        cmd = f'start "" "{git_bash_path}" --login -i -c "cd \'{venv_path_unix}\' && echo \'Ambiente virtual encontrado, mas script de ativação para Bash não localizado.\' && python .uv_warning.py; exec bash"'
+                else:
+                    cmd = f'start "" "{git_bash_path}" --login -i -c "cd \'{venv_path_unix}\' && echo \'Ambiente virtual não encontrado. Use python -m venv .venv para criar.\' && python .uv_warning.py; exec bash"'
+                
+                print(f"Executando comando: {cmd}")  # Debug
+                result = os.system(cmd)
+                print(f"Resultado da execução: {result}")  # Debug
+                
+            else:
+                # Sistema não suportado ou terminal não reconhecido
+                show_error_message("Erro", f"Tipo de terminal não suportado: {terminal_type}")
+                
+        except Exception as e:
+            show_error_message("Erro", f"Erro ao abrir terminal com ambiente virtual: {str(e)}")
+    
     def _on_theme_changed(self, event=None):
         """
         Manipula o evento de mudança do tema.
@@ -331,6 +510,7 @@ class ConfigManager(ttk.Frame):
             "python_path": sys.executable,
             "log_dir": os.path.join(Path(__file__).resolve().parent.parent, "logs"),
             "data_dir": os.path.join(Path(__file__).resolve().parent.parent, "data"),
+            "venv_path": os.path.join(Path(__file__).resolve().parent.parent, "mcp_server"),
             "theme": "default"  # Usando 'default' como tema padrão
         }
         
