@@ -225,6 +225,25 @@ class ConfigManager(ttk.Frame):
         claude_path_text = f"{claude_config_path} ({claude_status})"
         claude_path_label = self._create_link_label(claude_frame, claude_path_text, claude_config_path)
         claude_path_label.pack(side=tk.LEFT, padx=5)
+        
+        # Seção para CLI
+        cli_frame = ttk.LabelFrame(self, text="Interface de Linha de Comando (CLI)")
+        cli_frame.pack(fill=tk.X, pady=(0, 10))
+        
+        # Frame para controles do CLI
+        cli_controls_frame = ttk.Frame(cli_frame, padding=5)
+        cli_controls_frame.pack(fill=tk.X)
+        
+        # Informação sobre o CLI
+        ttk.Label(cli_controls_frame, text="Acesse funcionalidades avançadas através da linha de comando:").pack(side=tk.LEFT)
+        
+        # Botão para abrir o CLI (launcher.py)
+        open_cli_btn = ttk.Button(
+            cli_controls_frame,
+            text="Abrir CLI",
+            command=self._open_cli
+        )
+        open_cli_btn.pack(side=tk.RIGHT, padx=5)
     
     def _create_link_label(self, parent, text, path=None):
         """
@@ -521,6 +540,37 @@ class ConfigManager(ttk.Frame):
         
         # Informar usuário
         show_info_message("Configurações", "Configurações restauradas para os valores padrão.")
+
+    def _open_cli(self):
+        """
+        Abre o CLI (launcher.py) em um terminal.
+        """
+        try:
+            # Caminho para o launcher.py
+            launcher_path = os.path.join(Path(__file__).resolve().parent.parent, "cli", "launcher.py")
+            
+            if not os.path.exists(launcher_path):
+                show_error_message("CLI", "Arquivo launcher.py não encontrado.")
+                return
+            
+            # Diretório do projeto
+            project_dir = str(Path(__file__).resolve().parent.parent)
+            
+            # Comando para executar o launcher.py
+            if sys.platform == 'win32':
+                # Windows
+                cmd = f'start cmd.exe /K "cd /d "{project_dir}" && "{sys.executable}" "{launcher_path}""'
+            elif sys.platform == 'darwin':
+                # macOS
+                cmd = f'osascript -e \'tell app "Terminal" to do script "cd {project_dir} && python {launcher_path}"\''
+            else:
+                # Linux
+                cmd = f'x-terminal-emulator -e \'bash -c "cd {project_dir} && python {launcher_path}; exec bash"\''
+            
+            os.system(cmd)
+            
+        except Exception as e:
+            show_error_message("Erro", f"Erro ao abrir o CLI: {str(e)}")
 
 # Função para testar o módulo individualmente
 def main():
