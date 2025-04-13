@@ -53,7 +53,7 @@ Em versões futuras, pretendemos adicionar:
 
 ## 🎬 Vídeo Demonstrativo
 
-https://github.com/marcellobatiista/mcp-server-manager/blob/master/gui/assets/videos/video_cursor.mp4
+![Demonstração do MCP Server Manager](gui/assets/videos/video_cursor.gif)
 
 ## 🛠️ Tecnologias Utilizadas
 
