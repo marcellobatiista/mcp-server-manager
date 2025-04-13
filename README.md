@@ -51,6 +51,10 @@ Em versões futuras, pretendemos adicionar:
 ### Integração com Cursor
 ![Cursor MCP Servers](gui/assets/screenshorts/cursor-servers.png)
 
+## 🎬 Vídeo Demonstrativo
+
+https://github.com/marcellobatiista/mcp-server-manager/assets/videos/demo.mp4
+
 ## 🛠️ Tecnologias Utilizadas
 
 - Python 3.10+
