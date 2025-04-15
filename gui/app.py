@@ -16,6 +16,7 @@ from tkinter import ttk, filedialog, messagebox
 from pathlib import Path
 from datetime import datetime
 import re
+import psutil
 
 # Adiciona o diretório raiz ao sys.path
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -109,10 +110,128 @@ class MCPServerGUI(tk.Tk):
         # Atualizar contadores
         self.update_server_count()
         
+        # Programar a verificação de processos duplicados para acontecer 
+        # após um pequeno atraso para dar tempo da interface carregar completamente
+        self.after(3000, self.check_for_duplicate_processes)
+        
         # Iniciar o verificador de status em background
         self.should_check_status = True
         self.status_check_thread = threading.Thread(target=self._background_status_checker, daemon=True)
         self.status_check_thread.start()
+    
+    def check_for_duplicate_processes(self):
+        """Verifica se existem processos duplicados para os servidores e alerta o usuário."""
+        duplicates = self.server_manager.check_duplicate_processes()
+        
+        if duplicates:
+            # Criar mensagem detalhada
+            message = "Foram encontrados processos duplicados para os seguintes servidores:\n\n"
+            
+            for server_name, process_groups in duplicates.items():
+                message += f"• {server_name}: {len(process_groups)} instâncias separadas\n"
+                for i, group in enumerate(process_groups, 1):
+                    message += f"  - Grupo {i}: {len(group)} processos relacionados (PIDs: {', '.join(map(str, group))})\n"
+            
+            message += "\nInstâncias duplicadas podem causar conflitos e problemas de performance."
+            message += "\nDeseja parar todos os processos duplicados?"
+            
+            # Mostrar mensagem e perguntar se o usuário quer parar os processos
+            if ask_yes_no("Processos Duplicados Detectados", message):
+                # Inicia uma thread para lidar com a parada de processos para não bloquear a interface
+                affected_servers = list(duplicates.keys())
+                threading.Thread(
+                    target=self._handle_stop_duplicates,
+                    args=(affected_servers,),
+                    daemon=True
+                ).start()
+                
+                self.update_status("Parando processos duplicados...")
+            else:
+                self.update_status("Verificação concluída. Alguns servidores têm instâncias duplicadas")
+        else:
+            self.log("Verificação concluída. Nenhuma instância duplicada encontrada")
+    
+    def _handle_stop_duplicates(self, server_names):
+        """
+        Gerencia a parada de processos duplicados em uma thread separada.
+        
+        Args:
+            server_names: Lista de nomes de servidores com processos duplicados
+        """
+        try:
+            # Para todos os servidores afetados usando processos do sistema operacional
+            for server_name in server_names:
+                self.after(100, lambda sn=server_name: self.log(f"Parando processos do servidor '{sn}'"))
+                
+                # Obter o servidor
+                server = self.server_manager.get_server(server_name)
+                if not server:
+                    continue
+                
+                # Se já estiver parado, pular
+                if server.status == ServerStatus.STOPPED:
+                    continue
+                
+                # Encontrar e encerrar diretamente os processos duplicados pelo sistema operacional
+                try:
+                    script_name = os.path.basename(server.script_path)
+                    pids_to_kill = []
+                    
+                    # Encontrar todos os processos relacionados a este script
+                    for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+                        try:
+                            if proc.info['cmdline']:
+                                cmdline = proc.info['cmdline']
+                                if any(arg.endswith('/' + script_name) or arg.endswith('\\' + script_name) or arg == script_name for arg in cmdline):
+                                    pids_to_kill.append(proc.info['pid'])
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            continue
+                    
+                    # Encerrar todos os processos encontrados
+                    for pid in pids_to_kill:
+                        try:
+                            process = psutil.Process(pid)
+                            process.terminate()
+                        except (psutil.NoSuchProcess, psutil.AccessDenied):
+                            continue
+                except Exception as e:
+                    self.after(100, lambda e=e: self.log(f"Erro ao encerrar processos: {str(e)}"))
+                
+                # Aguardar um tempo para que os processos sejam encerrados
+                time.sleep(1)
+            
+            # Atualizar status de todos os servidores
+            self.after(100, lambda: self.server_manager.check_servers_status())
+            self.after(200, self._refresh_servers_tree)
+            
+            # Mostrar mensagem de instruções para o usuário
+            self.after(1000, self._show_update_instructions)
+            
+        except Exception as e:
+            self.after(100, lambda e=e: self.log(f"Erro ao parar processos: {str(e)}"))
+            self.after(200, lambda: self.update_status("Erro durante parada de processos"))
+    
+    def _show_update_instructions(self):
+        """Mostra instruções de como atualizar as configurações no Cursor e Claude."""
+        message = """Processos duplicados foram encerrados com sucesso.
+
+Para evitar que isso ocorra novamente, siga estas instruções:
+
+Se você usa o Cursor:
+
+- Abra o Cursor e reinicie manualmente os servidores através dele
+
+Se você usa o Claude Desktop:
+
+1. Feche completamente o Claude Desktop
+2. Reabra o Claude Desktop
+3. Aguarde a inicialização completa do Claude Desktop
+
+Nota: Processos duplicados geralmente ocorrem quando o mesmo servidor é configurado múltiplas vezes ou quando houve falha no encerramento anterior.
+"""
+        messagebox.showinfo("Instruções de Reinicialização", message)
+        self.update_status("Processos duplicados foram encerrados")
+        self.refresh_servers()
     
     def populate_servers_list(self):
         """Popula a lista de servidores com informações básicas, sem verificar status."""
@@ -154,10 +273,21 @@ class MCPServerGUI(tk.Tk):
             # Faça a primeira verificação (com um pequeno atraso)
             self.after(100, self.refresh_servers)
             
+            # Contador para verificação periódica de processos duplicados (a cada 5 minutos)
+            duplicate_check_counter = 0
+            
             # Loop de verificação periódica
             while self.should_check_status:
                 # Espera 20 segundos entre verificações (aumentar o intervalo reduz o impacto)
                 time.sleep(20)
+                
+                # Incrementar contador
+                duplicate_check_counter += 1
+                
+                # A cada 15 ciclos (5 minutos), verificar processos duplicados
+                if duplicate_check_counter >= 15:
+                    duplicate_check_counter = 0
+                    self.after(500, self.check_for_duplicate_processes)
                 
                 # Executa a verificação na thread principal usando after com um atraso maior
                 # Usar 300ms ajuda a garantir que a interface não travará
@@ -515,7 +645,7 @@ class MCPServerGUI(tk.Tk):
         # Frame principal da aba
         servers_frame = ttk.Frame(self.servers_tab, padding="10")
         servers_frame.pack(fill=tk.BOTH, expand=True)
-        
+
         # Título da seção
         servers_title = ttk.Label(
             servers_frame, 
@@ -523,7 +653,7 @@ class MCPServerGUI(tk.Tk):
             style="Subtitle.TLabel"
         )
         servers_title.grid(row=0, column=0, sticky="w", pady=(0, 10))
-        
+
         # Botões de ação principais
         actions_frame = ttk.Frame(servers_frame)
         actions_frame.grid(row=0, column=1, sticky="e", pady=(0, 10))
@@ -534,7 +664,7 @@ class MCPServerGUI(tk.Tk):
             command=self.add_server
         )
         add_button.pack(side=tk.LEFT, padx=5)
-        
+
         import_button = ttk.Button(
             actions_frame, 
             text="Importar Servidor", 
@@ -545,7 +675,7 @@ class MCPServerGUI(tk.Tk):
         # Contador de servidores ativos
         self.active_servers_label = ttk.Label(actions_frame, text="Servidores ativos: 0")
         self.active_servers_label.pack(side=tk.RIGHT, padx=(10, 0))
-        
+
         # Lista de servidores
         servers_container = ttk.Frame(servers_frame)
         servers_container.grid(row=1, column=0, columnspan=2, sticky="nsew", pady=(0, 10))
@@ -1675,13 +1805,13 @@ if __name__ == "__main__":
         
         if active_servers and not ask_yes_no(
             "Fechar aplicação", 
-            f"Existem {len(active_servers)} servidores em execução. Deseja realmente sair?"
+            f"Existem {len(active_servers)} servidores em execução. Deseja realmente sair?\n\n" +
+            "Os servidores continuarão rodando em segundo plano."
         ):
             return
         
-        # Encerrar todos os servidores antes de sair
-        for server in active_servers:
-            self.server_manager.stop_server(server.name)
+        # Não tentamos mais parar os servidores, apenas fechamos a aplicação
+        # Isso permite que os servidores continuem rodando em segundo plano
         
         # Fechar a aplicação
         self.destroy()

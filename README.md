@@ -4,7 +4,7 @@
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg)](https://www.python.org/downloads/)
 [![Status do Projeto](https://img.shields.io/badge/Status-Em%20Desenvolvimento-yellow.svg)]()
 [![Documentação](https://img.shields.io/badge/Docs-README-orange.svg)]()
-[![Versão](https://img.shields.io/badge/Versão-1.0.0-brightgreen.svg)]()
+[![Versão](https://img.shields.io/badge/Versão-1.2.0-brightgreen.svg)]()
 [![Dependências](https://img.shields.io/badge/Dependências-5-informational.svg)](requirements.txt)
 [![Compatibilidade](https://img.shields.io/badge/Compatibilidade-Windows%20|%20macOS-lightgrey.svg)]()
 [![MCP Protocol](https://img.shields.io/badge/MCP-Model%20Control%20Protocol-blueviolet.svg)]()
@@ -20,8 +20,14 @@ Este projeto é destinado principalmente a desenvolvedores que desejam criar, te
 
 - **Gerenciamento de Servidores MCP:** Iniciar, parar, reiniciar e monitorar servidores MCP
 - **Interface Dupla:** Interface de linha de comando e interface gráfica
+- **Interface Gráfica Moderna:** Interface visual para gerenciar seus servidores MCP
+- **Logs em Tempo Real:** Visualize os logs de cada servidor conforme são gerados
+- **Comunicação Bidirecional:** Envie comandos para o servidor e receba respostas
+- **Multi-servidor:** Gerencie múltiplos servidores simultaneamente
+- **Persistência:** Servidores ativos continuam rodando mesmo se você fechar a interface
 - **Configuração Automática:** Integração com Cursor e Claude Desktop
 - **Detecção de Processos:** Identificação automática de servidores em execução
+- **Verificação de Duplicados:** Checagem automática de processos duplicados durante inicialização e a cada 5 minutos
 - **Quick Setup:** Sistema de configuração rápida para novos ambientes
 - **Importação de Servidores:** Capacidade de importar servidores MCP existentes através da interface gráfica
 - **Sistema Multi-plataforma:** Compatível com Windows e macOS
@@ -46,6 +52,7 @@ Este projeto é destinado principalmente a desenvolvedores que desejam criar, te
 
 - ✅ **Servidores Locais**: O projeto permite criar, configurar e executar servidores MCP que rodam na mesma máquina que o cliente LLM
 - ✅ **Transporte stdio**: Os servidores implementados usam entrada/saída padrão para comunicação
+- ✅ **Gerenciamento Exclusivo**: O sistema gerencia exclusivamente servidores dentro do diretório "mcp_server"
 - ❌ **Servidores Remotos**: Atualmente não há suporte para servidores MCP remotos via HTTP/SSE
 - ❌ **Autenticação OAuth**: Não implementamos ainda a autenticação necessária para servidores remotos
 

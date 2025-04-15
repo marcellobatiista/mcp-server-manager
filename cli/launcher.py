@@ -283,19 +283,17 @@ def identificar_servidores_mcp(processos):
                 try:
                     diretorio = proc.info['cwd']
                     
-                    # Tenta identificar o nome do ambiente virtual
-                    partes_caminho = diretorio.split(os.path.sep)
+                    # Verifica se o caminho contém "mcp_server"
+                    if "mcp_server" not in diretorio.split(os.path.sep):
+                        # Pula este processo se não estiver dentro de mcp_server
+                        continue
                     
-                    # Se o caminho contém "demon" ou "mcp_server", usa-o como nome do projeto
-                    if "demon" in partes_caminho:
-                        nome_projeto = "demon"
-                    elif "mcp_server" in partes_caminho:
-                        nome_projeto = "demon"  # Também usar "demon" para caminhos antigos com "mcp_server"
-                    else:
-                        # Caso contrário, usa o último diretório
-                        nome_projeto = os.path.basename(diretorio)
+                    # Define o nome do projeto como "mcp_server"
+                    nome_projeto = "mcp_server"
+                    
                 except Exception:
-                    nome_projeto = "Desconhecido"
+                    # Se não conseguir determinar o diretório, pula este processo
+                    continue
                 
                 # Verifica se há porta específica definida
                 for i, cmd in enumerate(cmdline):

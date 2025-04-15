@@ -1092,6 +1092,138 @@ class ServerManager:
         
         return status_changes
 
+    def check_duplicate_processes(self):
+        """
+        Verifica se existem processos duplicados para os servidores.
+        Considera a relação pai-filho entre processos, onde processos relacionados
+        nessa hierarquia contam como um único processo.
+        
+        Returns:
+            dict: Dicionário com nomes de servidores como chaves e listas de grupos de processos como valores
+        """
+        duplicates = {}
+        
+        # Obter todos os processos Python uma única vez
+        python_processes = []
+        try:
+            for proc in psutil.process_iter(['pid', 'name', 'cmdline', 'ppid']):
+                try:
+                    if proc.info['name'] and 'python' in proc.info['name'].lower() and proc.info['cmdline']:
+                        python_processes.append(proc)
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
+        except Exception:
+            pass
+        
+        # Para cada servidor, identificar processos e suas relações
+        for server in self.servers:
+            if server.script_path:
+                script_name = os.path.basename(server.script_path)
+                
+                # Encontrar todos os processos para este script
+                script_processes = []
+                for proc in python_processes:
+                    try:
+                        cmdline = proc.info['cmdline']
+                        if any(arg.endswith('/' + script_name) or arg.endswith('\\' + script_name) or arg == script_name for arg in cmdline):
+                            script_processes.append(proc)
+                    except:
+                        continue
+                
+                # Se não encontrou pelo menos 2 processos, não pode ter duplicados
+                if len(script_processes) < 2:
+                    continue
+                
+                # Agrupar processos baseado nas relações pai-filho
+                process_groups = self._group_related_processes(script_processes)
+                
+                # Se houver mais de um grupo, temos processos realmente duplicados
+                if len(process_groups) > 1:
+                    # Armazenar os grupos de PIDs
+                    duplicates[server.name] = [
+                        [proc.info['pid'] for proc in group] 
+                        for group in process_groups
+                    ]
+        
+        return duplicates
+    
+    def _group_related_processes(self, processes):
+        """
+        Agrupa processos baseados na relação pai-filho.
+        
+        Args:
+            processes: Lista de processos para agrupar
+            
+        Returns:
+            list: Lista de grupos de processos, onde cada grupo contém processos relacionados
+        """
+        # Crie um dicionário para mapear PIDs para processos
+        pid_to_proc = {proc.info['pid']: proc for proc in processes}
+        
+        # Construa um grafo de relações pai-filho
+        parent_child = {}
+        for proc in processes:
+            pid = proc.info['pid']
+            ppid = proc.info.get('ppid', 0)
+            
+            # Se o pai também está na nossa lista, estabeleça a relação
+            if ppid in pid_to_proc:
+                if ppid not in parent_child:
+                    parent_child[ppid] = []
+                parent_child[ppid].append(pid)
+        
+        # Encontre processos "raiz" (que não têm pai na nossa lista ou têm pai fora da lista)
+        roots = []
+        for proc in processes:
+            pid = proc.info['pid']
+            ppid = proc.info.get('ppid', 0)
+            
+            # Se o pai não está na nossa lista ou o processo não tem um pai
+            if ppid not in pid_to_proc:
+                roots.append(pid)
+        
+        # Função para percorrer a árvore e coletar todos os processos relacionados
+        def collect_tree(root_pid, visited=None):
+            if visited is None:
+                visited = set()
+            
+            # Evite ciclos
+            if root_pid in visited:
+                return []
+            
+            visited.add(root_pid)
+            result = [pid_to_proc[root_pid]]
+            
+            # Adicione todos os filhos e seus descendentes
+            children = parent_child.get(root_pid, [])
+            for child_pid in children:
+                result.extend(collect_tree(child_pid, visited))
+                
+            return result
+        
+        # Colete todos os grupos de processos relacionados
+        groups = []
+        visited_pids = set()
+        
+        # Primeiro, comece pelos processos raiz
+        for root_pid in roots:
+            if root_pid not in visited_pids:
+                group = collect_tree(root_pid)
+                visited_pids.update(proc.info['pid'] for proc in group)
+                groups.append(group)
+        
+        # Verifique se há processos que não foram visitados (talvez devido a ciclos)
+        for proc in processes:
+            pid = proc.info['pid']
+            if pid not in visited_pids:
+                # Tente construir um grupo a partir deste processo
+                group = collect_tree(pid)
+                if group:
+                    visited_pids.update(proc.info['pid'] for proc in group)
+                    groups.append(group)
+        
+        return groups
+
 # Função para testar o módulo individualmente
 def main():
     """Função principal para teste do módulo."""
